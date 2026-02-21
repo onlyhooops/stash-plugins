@@ -17,9 +17,9 @@
 2. 在 **可用插件** 区域点击 **添加源**
 3. 输入本仓库的插件源 URL：
    ```
-   https://<你的GitHub用户名>.github.io/<仓库名>/main/index.yml
+   https://onlyhooops.github.io/stash-plugins/main/index.yml
    ```
-   例如：`https://yourname.github.io/stash-plugins/main/index.yml`
+   例如：`https://onlyhooops.github.io/stash-plugins/main/index.yml`
 4. 保存后即可在列表中看到并安装插件
 
 ### 方式二：手动安装
