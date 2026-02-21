@@ -1,0 +1,8 @@
+name: EnhancedWallView
+description: 瀑布流布局、无限滚动、内置 lightbox、筛选器（路径/标签/演员/排序）、视频悬停预览，兼容 FavoriteHeart
+version: 1.2.0
+ui:
+  javascript:
+    - EnhancedWallView.js
+  css:
+    - EnhancedWallView.css
