@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'plugins/**'
+      - '.github/**'
     branches:
       - main
   workflow_dispatch:
@@ -25,7 +26,7 @@ jobs:
       - name: Build plugin index
         run: |
           chmod +x build_site.sh
-          ./build_site.sh _site/${{ github.ref_name }}
+          ./build_site.sh _site
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
