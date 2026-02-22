@@ -1,0 +1,148 @@
+[251225 19:52:56] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 19:52:56] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 19:52:56] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 19:52:56] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 21:31:42] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 21:31:42] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:31:42] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 21:31:42] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 21:31:47] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 21:31:47] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:31:47] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 21:31:47] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 21:31:48] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=start_library_monitor_service)************************************************
+[251225 21:31:48] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:31:53] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 21:31:53] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:31:53] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 21:31:53] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 21:33:08] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 21:33:08] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:33:08] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 21:33:08] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 21:33:10] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=start_library_monitor_service)************************************************
+[251225 21:33:10] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:33:10] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=False) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=None)************************************************
+[251225 21:33:10] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:33:10] [LN:1050] ERR: Exception while running FileMonitor. runType='CommandLineStartLibMonitor'; Error: No module named 'watchdog'
+TraceBack=Traceback (most recent call last):
+  File "/opt/stash-linux/plugins/community/filemonitor/filemonitor.py", line 1044, in <module>
+    start_library_monitor()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/stash-linux/plugins/community/filemonitor/filemonitor.py", line 597, in start_library_monitor
+    from watchdog.observers import Observer # This is also needed for event attributes
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'watchdog'
+
+[251225 21:33:15] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 21:33:15] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:33:15] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 21:33:15] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 21:36:01] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 21:36:01] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:36:01] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 21:36:01] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 21:44:17] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 21:44:17] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:44:17] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 21:44:17] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 21:44:19] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=start_library_monitor_service)************************************************
+[251225 21:44:19] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:44:21] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=False) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=None)************************************************
+[251225 21:44:21] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:44:21] [LN:1050] ERR: Exception while running FileMonitor. runType='CommandLineStartLibMonitor'; Error: No module named 'watchdog'
+TraceBack=Traceback (most recent call last):
+  File "/opt/stash-linux/plugins/community/filemonitor/filemonitor.py", line 1044, in <module>
+    start_library_monitor()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/stash-linux/plugins/community/filemonitor/filemonitor.py", line 597, in start_library_monitor
+    from watchdog.observers import Observer # This is also needed for event attributes
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'watchdog'
+
+[251225 21:44:26] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 21:44:26] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:44:26] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 21:44:26] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 21:46:59] [LN:79] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 21:46:59] [LN:193] INF: This Stash instance GQL = http://localhost:9999
+[251225 21:46:59] [LN:1001] INF: FileMonitor is NOT running!!!
+[251225 21:46:59] [LN:1002] INF: getFileMonitorRunningStatus complete
+[251225 22:01:50] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 22:01:50] [LN:195] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:01:50] [LN:1003] INF: FileMonitor is NOT running!!!
+[251225 22:01:50] [LN:1004] INF: getFileMonitorRunningStatus complete
+[251225 22:01:53] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 22:01:53] [LN:195] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:01:53] [LN:1003] INF: FileMonitor is NOT running!!!
+[251225 22:01:53] [LN:1004] INF: getFileMonitorRunningStatus complete
+[251225 22:01:54] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=start_library_monitor_service)************************************************
+[251225 22:01:54] [LN:195] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:01:54] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=False) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=None)************************************************
+[251225 22:01:54] [LN:195] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:01:54] [LN:1052] ERR: Exception while running FileMonitor. runType='CommandLineStartLibMonitor'; Error: No module named 'watchdog'
+TraceBack=Traceback (most recent call last):
+  File "/opt/stash-linux/plugins/community/filemonitor/filemonitor.py", line 1046, in <module>
+    start_library_monitor()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/stash-linux/plugins/community/filemonitor/filemonitor.py", line 599, in start_library_monitor
+    from watchdog.observers import Observer # This is also needed for event attributes
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'watchdog'
+
+[251225 22:01:59] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 22:01:59] [LN:195] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:01:59] [LN:1003] INF: FileMonitor is NOT running!!!
+[251225 22:01:59] [LN:1004] INF: getFileMonitorRunningStatus complete
+[251225 22:04:45] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 22:04:45] [LN:201] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:04:45] [LN:1027] INF: FileMonitor is NOT running!!!
+[251225 22:04:45] [LN:1028] INF: getFileMonitorRunningStatus complete
+[251225 22:04:51] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 22:04:51] [LN:201] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:04:51] [LN:1027] INF: FileMonitor is NOT running!!!
+[251225 22:04:51] [LN:1028] INF: getFileMonitorRunningStatus complete
+[251225 22:04:52] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=start_library_monitor_service)************************************************
+[251225 22:04:52] [LN:201] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:04:53] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=False) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=None)************************************************
+[251225 22:04:53] [LN:201] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:04:53] [LN:621] ERR: Required module 'watchdog' is not available in Stash's Python environment. On Arch Linux, ensure packages are installed and accessible to Stash's Python interpreter. Error: No module named 'watchdog'
+[251225 22:04:53] [LN:1076] ERR: Exception while running FileMonitor. runType='CommandLineStartLibMonitor'; Error: No module named 'watchdog'
+TraceBack=Traceback (most recent call last):
+  File "/opt/stash-linux/plugins/community/filemonitor/filemonitor.py", line 1070, in <module>
+    start_library_monitor()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/stash-linux/plugins/community/filemonitor/filemonitor.py", line 618, in start_library_monitor
+    from watchdog.observers import Observer # This is also needed for event attributes
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'watchdog'
+
+[251225 22:04:58] [LN:80] INF: 
+Starting (__file__=/opt/stash-linux/plugins/community/filemonitor/filemonitor.py) (stash.CALLED_AS_STASH_PLUGIN=True) (stash.DEBUG_TRACING=False) (stash.DRY_RUN=False) (stash.PLUGIN_TASK_NAME=getFileMonitorRunningStatus)************************************************
+[251225 22:04:58] [LN:201] INF: This Stash instance GQL = http://localhost:9999
+[251225 22:04:58] [LN:1027] INF: FileMonitor is NOT running!!!
+[251225 22:04:58] [LN:1028] INF: getFileMonitorRunningStatus complete
