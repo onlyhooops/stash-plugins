@@ -38,17 +38,15 @@
 
   // ==================== 配置 ====================
   const STORAGE_KEY = 'EnhancedWallView_config';
+  /* 瀑布流外边距固定最小不变；调整布局时只增加图片与图片之间的行距/列距以适应瀑布流 */
   const LAYOUT_PRESETS = {
-    compact:   { columnWidth: 200, columnGap: 4, rowGap: 4, label: '紧凑', desc: '小卡片，更多列' },
-    balanced:  { columnWidth: 260, columnGap: 6, rowGap: 6, label: '均衡', desc: '默认推荐' },
-    spacious:  { columnWidth: 320, columnGap: 10, rowGap: 10, label: '宽松', desc: '大卡片，呼吸感' },
-    large:     { columnWidth: 380, columnGap: 12, rowGap: 12, label: '超大', desc: '大图优先' },
+    compact: { columnWidth: 200, columnGap: 4, rowGap: 4, label: '紧凑', desc: '小卡片，最小行距列距' },
   };
   const DEFAULT_CONFIG = {
-    layoutPreset: 'balanced',  // 布局预设：compact | balanced | spacious | large
-    columnWidth: 260,
-    columnGap: 6,
-    rowGap: 6,
+    layoutPreset: 'compact',
+    columnWidth: 200,
+    columnGap: 4,
+    rowGap: 4,
     itemsPerPage: 40,
     loadThreshold: 600,
     videoPreviewDelay: 300,
@@ -68,16 +66,21 @@
     return { columnWidth: cfg.columnWidth, columnGap: cfg.columnGap, rowGap: cfg.rowGap };
   }
 
+  let _configCache = null;
+
   /**
-   * 获取当前配置（合并 localStorage 中的用户设置）
+   * 获取当前配置（合并 localStorage 中的用户设置，带缓存避免重复解析）
    */
   function getConfig() {
+    if (_configCache) return _configCache;
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       const parsed = stored ? JSON.parse(stored) : {};
-      return { ...DEFAULT_CONFIG, ...parsed };
+      _configCache = { ...DEFAULT_CONFIG, ...parsed };
+      return _configCache;
     } catch (e) {
-      return { ...DEFAULT_CONFIG };
+      _configCache = { ...DEFAULT_CONFIG };
+      return _configCache;
     }
   }
 
@@ -88,6 +91,7 @@
     const current = getConfig();
     const merged = { ...current, ...updates };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    _configCache = merged;
     return merged;
   }
 
@@ -96,7 +100,8 @@
    */
   function resetConfig() {
     localStorage.removeItem(STORAGE_KEY);
-    return { ...DEFAULT_CONFIG };
+    _configCache = { ...DEFAULT_CONFIG };
+    return _configCache;
   }
 
   // GraphQL 端点
@@ -181,11 +186,11 @@
       content.addEventListener('mousedown', (e) => {
         if (e.button === 0) { overlay._lbState.isDragging = true; overlay._lbState.lastX = e.clientX; overlay._lbState.lastY = e.clientY; }
       });
-      document.addEventListener('mousemove', (e) => {
+      overlay._lbMouseMove = (e) => {
         const s = overlay._lbState;
         if (s.isDragging) { s.translateX += e.clientX - s.lastX; s.translateY += e.clientY - s.lastY; s.lastX = e.clientX; s.lastY = e.clientY; scheduleApply(); }
-      });
-      document.addEventListener('mouseup', () => { if (overlay._lbState) overlay._lbState.isDragging = false; });
+      };
+      overlay._lbMouseUp = () => { if (overlay._lbState) overlay._lbState.isDragging = false; };
     }
     if (!overlay._lbState) overlay._lbState = { scale: 1, translateX: 0, translateY: 0 };
 
@@ -206,6 +211,8 @@
     overlay.addEventListener('lightbox:close', () => {
       overlay.classList.remove('enhanced-wall-lightbox-visible');
       document.body.style.overflow = '';
+      if (overlay._lbMouseMove) document.removeEventListener('mousemove', overlay._lbMouseMove);
+      if (overlay._lbMouseUp) document.removeEventListener('mouseup', overlay._lbMouseUp);
     });
     overlay.addEventListener('lightbox:prev', () => {
       if (currentIndex > 0) { currentIndex--; updateContent(); }
@@ -222,22 +229,34 @@
     });
 
     updateContent();
+    document.addEventListener('mousemove', overlay._lbMouseMove);
+    document.addEventListener('mouseup', overlay._lbMouseUp);
     overlay.classList.add('enhanced-wall-lightbox-visible');
     document.body.style.overflow = 'hidden';
   }
 
   // ==================== 工具函数 ====================
 
+  const GRAPHQL_TIMEOUT_MS = 30000;
+
   /**
-   * 发送 GraphQL 请求
+   * 发送 GraphQL 请求（支持 AbortSignal 与超时，便于在 disable/refresh 时取消）
    */
-  async function graphqlRequest(query, variables = {}) {
+  async function graphqlRequest(query, variables = {}, options = {}) {
+    const { signal: externalSignal } = options;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), GRAPHQL_TIMEOUT_MS);
+    if (externalSignal) {
+      if (externalSignal.aborted) { clearTimeout(timeoutId); return null; }
+      externalSignal.addEventListener('abort', () => { clearTimeout(timeoutId); controller.abort(); }, { once: true });
+    }
     try {
       const response = await fetch(GRAPHQL_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',  // 携带 cookie 以通过认证
+        credentials: 'same-origin',
         body: JSON.stringify({ query, variables }),
+        signal: controller.signal,
       });
       const result = await response.json();
       if (result.errors) {
@@ -252,8 +271,11 @@
       }
       return result.data;
     } catch (err) {
+      if (err.name === 'AbortError') return null;
       error('请求失败:', err);
       return null;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -395,15 +417,15 @@
         log('容器宽度为0，使用窗口宽度');
         return;
       }
-      
+
       this.columnCount = Math.max(1, Math.floor((containerWidth + this.columnGap) / (this.columnWidth + this.columnGap)));
       this.columnHeights = new Array(this.columnCount).fill(0);
-      
+
       // 更新容器宽度以居中
       const totalWidth = this.columnCount * this.columnWidth + (this.columnCount - 1) * this.columnGap;
       this.container.style.width = `${totalWidth}px`;
       this.container.style.margin = '0 auto';
-      
+
       log(`计算列数: ${this.columnCount}, 容器宽度: ${containerWidth}px, 瀑布流宽度: ${totalWidth}px`);
     }
 
@@ -451,13 +473,24 @@
     }
 
     /**
-     * 重新布局所有项目
+     * 是否参与布局（被 FavoriteHeart 隐藏的 dislike 项不占位，由后续项递补）
+     */
+    isItemVisibleForLayout(item) {
+      if (!item?.element) return true;
+      const body = this.container?.ownerDocument?.body || (typeof document !== 'undefined' && document.body);
+      if (!body || !body.classList.contains('favorite-heart-hide-disliked')) return true;
+      return !item.element.classList.contains('favorite-heart-has-dislike');
+    }
+
+    /**
+     * 重新布局所有项目（仅对“可见”项占位，隐藏项不参与以递补空缺）
      */
     relayout() {
       this.calculateColumns();
       this.columnHeights = new Array(this.columnCount).fill(0);
 
       for (const item of this.items) {
+        if (!this.isItemVisibleForLayout(item)) continue;
         const columnIndex = this.getShortestColumn();
         const left = columnIndex * (this.columnWidth + this.columnGap);
         const top = this.columnHeights[columnIndex];
@@ -670,13 +703,14 @@
       this.masonry = null;
       this.scroller = null;
       this.videoPreview = null;
-      
+      this.abortController = null;
+
       this.items = [];
       this.page = 1;
       this.totalCount = 0;
       this.pageType = null;
       this.isEnabled = false;
-      
+
       this.loadingIndicator = null;
       this.resizeHandler = null;
     }
@@ -710,6 +744,7 @@
         return;
       }
       this.isEnabled = true;
+      this.abortController = new AbortController();
 
       log('🚀 启用瀑布流增强预览墙', pluginMount ? '(PluginApi 挂载)' : '');
 
@@ -721,13 +756,13 @@
       document.body.classList.add('enhanced-wall-active');
       if (pluginMount) pluginMount.classList.add('enhanced-wall-mount');
       this.createContainer(pluginMount);
-      
+
       if (!this.masonryContainer) {
         error('创建容器失败');
         this.isEnabled = false;
         return;
       }
-      
+
       // 初始化瀑布流布局（使用预设或自定义参数）
       const layout = getLayoutParams();
       this.masonry = new MasonryLayout(this.masonryContainer, {
@@ -783,6 +818,10 @@
     disable() {
       if (!this.isEnabled) return;
       this.isEnabled = false;
+      if (this.abortController) {
+        this.abortController.abort();
+        this.abortController = null;
+      }
 
       log('禁用瀑布流增强预览墙');
 
@@ -911,6 +950,7 @@
         targetContainer.insertBefore(this.container, targetContainer.firstChild);
       }
 
+      // 标记作用域，使 CSS 仅影响此区域
       // 标记作用域，使 CSS 仅影响此区域，避免影响 tags/图库等页面的原生墙视图
       this.regionElement = targetContainer;
       targetContainer.classList.add('enhanced-wall-region');
@@ -919,7 +959,7 @@
       toolbar.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
-        
+
         const action = btn.dataset.action;
         if (action === 'settings') {
           this.openSettingsPanel();
@@ -950,7 +990,7 @@
         searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') applySearch(); });
         searchInput.addEventListener('blur', () => applySearch());
       }
-      
+
       log('容器创建完成');
     }
 
@@ -961,7 +1001,7 @@
       if (!this.isEnabled || !this.scroller || !this.scroller.hasMore || !this.masonryContainer) return;
 
       this.showLoading(true);
-      log(`加载第 ${this.page} 页数据...`);
+      log('加载第 ' + this.page + ' 页数据...');
 
       try {
         const data = await this.fetchData();
@@ -1085,8 +1125,10 @@
           return null;
       }
 
-      let result = await graphqlRequest(query, variables);
-      
+      const signal = this.abortController?.signal;
+      const result = await graphqlRequest(query, variables, signal ? { signal } : {});
+      if (signal?.aborted) return null;
+
       // GraphQL 失败时，仅第一页尝试从 DOM 解析已加载的数据
       if (!result || !result[resultKey]) {
         if (this.page === 1) {
@@ -1414,12 +1456,12 @@
     }
 
     /**
-     * 显示结束消息
+     * 显示结束消息（无更多数据时在 loading 区域显示）
      */
     showEndMessage() {
       if (this.loadingIndicator) {
         this.loadingIndicator.style.display = 'flex';
-        this.loadingIndicator.innerHTML = `<span class="enhanced-wall-end">✨ 已加载全部 ${this.totalCount} 项内容</span>`;
+        this.loadingIndicator.innerHTML = '<span class="enhanced-wall-end">✨ 已加载全部内容</span>';
       }
     }
 
@@ -1438,18 +1480,15 @@
      */
     async refresh() {
       log('刷新数据...');
-      // 清空现有项目
-      this.items.forEach(item => item.element.remove());
+      if (this.abortController) this.abortController.abort();
+      this.abortController = new AbortController();
+
+      this.items.forEach(item => item.element?.remove());
       this.items = [];
       this.page = 1;
-      
-      if (this.masonry) {
-        this.masonry.clear();
-      }
-      
-      if (this.scroller) {
-        this.scroller.reset();
-      }
+
+      if (this.masonry) this.masonry.clear();
+      if (this.scroller) this.scroller.reset();
 
       await this.loadMore();
     }
@@ -1710,9 +1749,6 @@
       }
 
       const cfg = getConfig();
-      const presetOpts = Object.entries(LAYOUT_PRESETS).map(([key, p]) =>
-        `<option value="${key}" ${cfg.layoutPreset === key ? 'selected' : ''}>${p.label} — ${p.desc}</option>`
-      ).join('');
       modal = document.createElement('div');
       modal.id = 'enhanced-wall-settings-modal';
       modal.className = 'enhanced-wall-settings-modal';
@@ -1724,13 +1760,6 @@
             <button class="enhanced-wall-settings-close" data-action="close">&times;</button>
           </div>
           <div class="enhanced-wall-settings-body">
-            <div class="enhanced-wall-settings-section">
-              <h4>布局风格</h4>
-              <select id="ew-setting-layoutPreset" class="enhanced-wall-preset-select">
-                ${presetOpts}
-              </select>
-              <p class="enhanced-wall-preset-hint">选择预设即可生效，无需手动调整参数</p>
-            </div>
             <div class="enhanced-wall-settings-section">
               <h4>功能开关</h4>
               <div class="enhanced-wall-settings-row enhanced-wall-settings-checkbox">
@@ -1779,8 +1808,6 @@
     populateSettingsForm(modal) {
       if (!modal) return;
       const cfg = getConfig();
-      const presetEl = modal.querySelector('#ew-setting-layoutPreset');
-      if (presetEl) presetEl.value = cfg.layoutPreset || 'balanced';
       const itemsEl = modal.querySelector('#ew-setting-itemsPerPage');
       if (itemsEl) itemsEl.value = cfg.itemsPerPage;
       ['enableOnImages', 'enableOnScenes', 'enableLightbox', 'debug'].forEach(id => {
@@ -1801,21 +1828,18 @@
      * 保存设置并刷新
      */
     saveSettings() {
-      const preset = document.getElementById('ew-setting-layoutPreset')?.value;
-      const presetData = LAYOUT_PRESETS[preset];
+      const preset = LAYOUT_PRESETS.compact;
       const updates = {
-        layoutPreset: preset || 'balanced',
+        layoutPreset: 'compact',
+        columnWidth: preset.columnWidth,
+        columnGap: preset.columnGap,
+        rowGap: preset.rowGap,
         enableLightbox: document.getElementById('ew-setting-enableLightbox')?.checked ?? true,
         enableOnImages: document.getElementById('ew-setting-enableOnImages')?.checked ?? true,
         enableOnScenes: document.getElementById('ew-setting-enableOnScenes')?.checked ?? true,
         itemsPerPage: parseInt(document.getElementById('ew-setting-itemsPerPage')?.value, 10) || DEFAULT_CONFIG.itemsPerPage,
         debug: document.getElementById('ew-setting-debug')?.checked ?? false,
       };
-      if (presetData) {
-        updates.columnWidth = presetData.columnWidth;
-        updates.columnGap = presetData.columnGap;
-        updates.rowGap = presetData.rowGap;
-      }
       saveConfig(updates);
       this.closeSettingsPanel();
       this.disable();
@@ -1921,7 +1945,11 @@
         setTimeout(checkUrl, 50);
       };
     }
-    const urlObserver = new MutationObserver(() => setTimeout(checkUrl, 100));
+    let urlDebounceTimer = null;
+    const urlObserver = new MutationObserver(() => {
+      if (urlDebounceTimer) clearTimeout(urlDebounceTimer);
+      urlDebounceTimer = setTimeout(() => { urlDebounceTimer = null; checkUrl(); }, 200);
+    });
     urlObserver.observe(document.body, { childList: true, subtree: true });
   }
 
@@ -1961,6 +1989,18 @@
       setTimeout(tryBootstrap, 100);
     }
   }
+
+  // 与 FavoriteHeart 联动：隐藏 dislike 后触发重排，递补空缺
+  document.addEventListener('favoriteHeartLayoutInvalidate', () => {
+    if (enhancedWall?.masonry) {
+      requestAnimationFrame(() => {
+        if (enhancedWall?.masonry) {
+          enhancedWall.masonry.relayout();
+          log('瀑布流已按 FavoriteHeart 可见性重排');
+        }
+      });
+    }
+  });
 
   log('Stash 瀑布流增强预览墙插件已加载');
 })();

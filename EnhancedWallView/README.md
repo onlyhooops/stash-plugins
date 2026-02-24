@@ -1,17 +1,15 @@
 # Enhanced Wall View
 
-Stash 瀑布流增强预览墙插件，为图片与短片列表提供瀑布流布局、无限滚动、筛选器、内置 lightbox 及视频悬停预览。
+Stash 图片/短片列表瀑布流插件：无限滚动、内置 lightbox、筛选与视频悬停预览。
 
 ## 功能
 
-- **瀑布流布局**：Masonry 布局，自适应窗口宽度
-- **无限滚动**：IntersectionObserver 懒加载，无主线程轮询
-- **随览**：工具栏「🎲 随览」按钮，切换到 Stash 原生 random 模式（`sortby=random_<seed>&z=0`），支持无限滚动，与原生体验一致
-- **筛选器**：关键词、路径选择、标签/演员/工作室、排序（创建时间/日期/标题等）
-- **图片 Lightbox**：内置全屏查看器，支持左右切换、缩放（0.2x–10x）、拖拽
-- **视频悬停预览**：悬停短片卡片时自动播放预览
-- **智能规格标签**：分辨率、时长、收藏数等
-- **插件协作**：派发 `enhancedWallItemAdded` 事件，兼容 FavoriteHeart 红心收藏
+- **瀑布流**：Masonry 紧凑布局，自适应宽度
+- **无限滚动**：IntersectionObserver 懒加载
+- **筛选**：关键词、路径、标签/演员/工作室、排序；随览（随机）
+- **Lightbox**：全屏看图，缩放与拖拽
+- **视频悬停**：短片卡片悬停预览
+- **协作**：`enhancedWallItemAdded` 事件，兼容 FavoriteHeart
 
 ## 安装
 
@@ -44,25 +42,20 @@ Stash 瀑布流增强预览墙插件，为图片与短片列表提供瀑布流�
 | `sortby` | 排序字段（created_at / date / title / rating100 / updated_at / random_&lt;seed&gt;） |
 | `sortdir` | 排序方向，`ASC` 或 `DESC` |
 
-## 性能
+## 性能与鲁棒性
 
 - 无限滚动：IntersectionObserver，无 scroll 轮询
-- 布局：ResizeObserver + debounce 窗口/容器尺寸变化
-- Lightbox：`requestAnimationFrame`、`will-change: transform`
-- DOM：批量插入、单次高度更新，减少 reflow
+- 布局：ResizeObserver + debounce；DOM 批量插入、单次高度更新
+- 请求：GraphQL 支持 AbortSignal（刷新/离开时取消）、30s 超时
+- 配置缓存、Lightbox 文档级监听按需绑定/解绑；路由 fallback 防抖
 
 ## 配置
 
 在列表页工具栏点击「⚙️ 设置」配置，保存至 `localStorage`。
 
-### 布局预设
+### 布局
 
-| 预设 | 说明 |
-|------|------|
-| 紧凑 | 小卡片，更多列 |
-| 均衡 | 默认推荐 |
-| 宽松 | 大卡片，呼吸感 |
-| 超大 | 大图优先 |
+当前仅支持紧凑视图（小卡片、最小间距）。
 
 ### 功能开关
 
@@ -80,4 +73,4 @@ Stash 瀑布流增强预览墙插件，为图片与短片列表提供瀑布流�
 
 ## 版本
 
-v1.3.0
+v1.4.0

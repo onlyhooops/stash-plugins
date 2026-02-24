@@ -1,0 +1,8 @@
+name: ImageDuplicateChecker
+description: 图片重复检测工具 - 按 phash 查找重复图片并支持批量删除（需 Stash 支持 findDuplicateImages API）
+version: 1.0.0
+ui:
+  javascript:
+    - ImageDuplicateChecker.js
+  css:
+    - ImageDuplicateChecker.css

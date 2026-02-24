@@ -24,11 +24,11 @@ html.enhanced-wall-preload .gallery-card {
   max-width: 100% !important;
 }
 
-/* 瀑布流整体仅保留最小内边距 */
+/* 瀑布流：外边距固定最小不变；仅通过列/行间距调节图片与图片之间的间距 */
 .enhanced-wall-container {
   position: relative;
   width: 100%;
-  padding: 0 0.5rem;
+  padding: 0 4px;
   margin: 0;
   box-sizing: border-box;
 }
@@ -37,14 +37,16 @@ html.enhanced-wall-preload .gallery-card {
   position: relative;
   min-height: 200px;
   padding: 0;
+  margin: 0;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
 }
 
-/* === 瀑布流项目 - 精简效果，原生性能 === */
+/* === 瀑布流项目 - 仅通过列/行间距控制间距，不增加边距 === */
 .enhanced-wall-item {
   position: absolute;
+  margin: 0;
   background: var(--card-bg, #0d0d12);
   border-radius: 4px;
   overflow: hidden;
@@ -248,7 +250,7 @@ html.enhanced-wall-preload .gallery-card {
   border-radius: 8px;
 }
 
-/* === 工具栏：贯穿全窗宽度，与 Stash 原生背景和谐 === */
+/* === 工具栏：毛玻璃透明背景，贯穿全窗宽度 === */
 .enhanced-wall-toolbar {
   display: flex;
   align-items: center;
@@ -262,8 +264,10 @@ html.enhanced-wall-preload .gallery-card {
   position: relative;
   left: 50%;
   margin-left: -50vw;
-  background: var(--bs-body-bg, var(--card-bg, #0d0d12));
-  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  background: rgba(31, 36, 59, 0.65);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .enhanced-wall-toolbar-left {
@@ -356,22 +360,22 @@ html.enhanced-wall-preload .gallery-card {
     flex-direction: column;
     gap: 0.75rem;
   }
-  
+
   .enhanced-wall-toggle {
     width: 100%;
     justify-content: center;
   }
-  
+
   .enhanced-wall-toggle-btn {
     flex: 1;
     text-align: center;
   }
-  
+
   .enhanced-wall-play-indicator {
     width: 44px;
     height: 44px;
   }
-  
+
   .enhanced-wall-play-indicator .play-icon {
     border-width: 10px 0 10px 16px;
   }
@@ -379,9 +383,9 @@ html.enhanced-wall-preload .gallery-card {
 
 @media (max-width: 480px) {
   .enhanced-wall-container {
-    padding: 0.5rem;
+    padding: 0 4px;
   }
-  
+
   .enhanced-wall-spec {
     font-size: 0.6rem;
     padding: 0.15rem 0.35rem;
@@ -410,10 +414,11 @@ html.enhanced-wall-preload .gallery-card {
   .enhanced-wall-item {
     background: var(--card-bg, #1a1a2e);
   }
-  
   .enhanced-wall-toolbar {
-    background: var(--bs-body-bg, var(--card-bg, #1a1a2e));
-    border-bottom-color: var(--border-color, rgba(255, 255, 255, 0.08));
+    background: rgba(31, 36, 59, 0.65);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-bottom-color: rgba(255, 255, 255, 0.08);
   }
 }
 

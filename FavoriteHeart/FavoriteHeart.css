@@ -5,12 +5,36 @@
    参考：https://discourse.stashapp.cc/t/custom-css-snippets/4043
    ======================================== */
 
-/* === 通用红心按钮样式 === */
-.favorite-heart-btn {
+/* === 右上角统一槽位：未点亮时 ♥️ 与 💔 竖向排列，点亮后仅显示被点亮的图标 === */
+.favorite-heart-actions {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
   z-index: 999;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+}
+
+.favorite-heart-actions .favorite-heart-btn,
+.favorite-heart-actions .favorite-dislike-btn {
+  position: relative;
+  top: auto;
+  right: auto;
+  left: auto;
+}
+
+/* 已点亮时只显示对应图标在右上角，未点亮的隐藏 */
+.favorite-heart-actions .favorite-heart-btn.favorited ~ .favorite-dislike-btn {
+  display: none !important;
+}
+.favorite-heart-actions:has(.favorite-dislike-btn.disliked) .favorite-heart-btn {
+  display: none !important;
+}
+
+/* === 通用红心按钮样式 === */
+.favorite-heart-btn {
   width: 2.5rem;
   height: 2.5rem;
   background: transparent;
@@ -62,12 +86,58 @@
   }
 }
 
+/* === 心碎（不喜欢）按钮 - 去色显示 === */
+.favorite-dislike-btn {
+  width: 2.5rem;
+  height: 2.5rem;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  opacity: 0;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.favorite-dislike-btn:hover {
+  transform: scale(1.1);
+}
+
+.favorite-dislike-btn::before {
+  content: "💔";
+  font-size: 1.35rem;
+  line-height: 1;
+  transition: all 0.3s ease;
+  filter: grayscale(1) drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+}
+
+.favorite-dislike-btn.disliked {
+  opacity: 1 !important;
+}
+
+.favorite-dislike-btn.disliked::before {
+  opacity: 1;
+  filter: grayscale(1) drop-shadow(0 0 2px rgba(0, 0, 0, 0.9));
+}
+
+.favorite-dislike-btn.loading {
+  pointer-events: none;
+  opacity: 0.6 !important;
+}
+
+.favorite-dislike-btn.loading::before {
+  animation: pulse 1s ease infinite;
+}
+
 /* === 场景/短片卡片 - 网格视图 === */
 .scene-card .thumbnail-section {
   position: relative;
 }
 
-.scene-card:hover .favorite-heart-btn {
+.scene-card:hover .favorite-heart-btn,
+.scene-card:hover .favorite-dislike-btn {
   opacity: 1;
 }
 
@@ -76,7 +146,8 @@
   position: relative;
 }
 
-.image-card:hover .favorite-heart-btn {
+.image-card:hover .favorite-heart-btn,
+.image-card:hover .favorite-dislike-btn {
   opacity: 1;
 }
 
@@ -85,7 +156,8 @@
   position: relative;
 }
 
-.gallery-card:hover .favorite-heart-btn {
+.gallery-card:hover .favorite-heart-btn,
+.gallery-card:hover .favorite-dislike-btn {
   opacity: 1;
 }
 
@@ -94,7 +166,8 @@
   position: relative;
 }
 
-.performer-card:hover .favorite-heart-btn {
+.performer-card:hover .favorite-heart-btn,
+.performer-card:hover .favorite-dislike-btn {
   opacity: 1;
 }
 
@@ -103,7 +176,8 @@
   position: relative;
 }
 
-.group-card:hover .favorite-heart-btn {
+.group-card:hover .favorite-heart-btn,
+.group-card:hover .favorite-dislike-btn {
   opacity: 1;
 }
 
@@ -112,7 +186,8 @@
   position: relative !important;
 }
 
-.wall-item:hover .favorite-heart-btn {
+.wall-item:hover .favorite-heart-btn,
+.wall-item:hover .favorite-dislike-btn {
   opacity: 1;
   z-index: 1000;
 }
@@ -122,7 +197,8 @@
   position: relative;
 }
 
-.wall-item-media:hover .favorite-heart-btn {
+.wall-item-media:hover .favorite-heart-btn,
+.wall-item-media:hover .favorite-dislike-btn {
   opacity: 1;
 }
 
@@ -143,7 +219,8 @@
   margin: 0 !important;
 }
 
-.wall-image-wrapper:hover .favorite-heart-btn {
+.wall-image-wrapper:hover .favorite-heart-btn,
+.wall-image-wrapper:hover .favorite-dislike-btn {
   opacity: 1;
 }
 
@@ -152,19 +229,25 @@
   position: relative;
 }
 
-.flexbin > *:hover .favorite-heart-btn {
+.flexbin > *:hover .favorite-heart-btn,
+.flexbin > *:hover .favorite-dislike-btn {
   opacity: 1;
 }
 
 /* === 响应式调整 === */
 @media (max-width: 768px) {
-  .favorite-heart-btn {
+  .favorite-heart-btn,
+  .favorite-dislike-btn {
     width: 2rem;
     height: 2rem;
   }
-  
+
   .favorite-heart-btn::before {
     font-size: 1.2rem;
+  }
+
+  .favorite-dislike-btn::before {
+    font-size: 1.1rem;
   }
 }
 
@@ -196,12 +279,21 @@
   position: relative;
 }
 
-.enhanced-wall-item .favorite-heart-btn {
+.enhanced-wall-item .favorite-heart-actions {
   top: 0.5rem;
   right: 0.5rem;
   z-index: 10;
 }
 
-.enhanced-wall-item:hover .favorite-heart-btn {
+.enhanced-wall-item:hover .favorite-heart-btn,
+.enhanced-wall-item:hover .favorite-dislike-btn {
   opacity: 1;
+}
+
+/* === 隐藏带 dislike 的照片/视频（仅 scenes/images），仅在 Dislike 标签页内可见 === */
+body.favorite-heart-hide-disliked .scene-card.favorite-heart-has-dislike,
+body.favorite-heart-hide-disliked .image-card.favorite-heart-has-dislike,
+body.favorite-heart-hide-disliked .wall-image-wrapper.favorite-heart-has-dislike,
+body.favorite-heart-hide-disliked .enhanced-wall-item.favorite-heart-has-dislike {
+  display: none !important;
 }

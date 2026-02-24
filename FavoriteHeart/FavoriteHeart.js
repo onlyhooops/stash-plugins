@@ -15,6 +15,7 @@
   const getPluginConfig = () => {
     const defaultConfig = {
       favoriteTagName: '精选集',
+      dislikeTagName: 'Dislike',
       checkInterval: 3000,
       enableOnScenes: true,
       enableOnImages: true,
@@ -41,6 +42,7 @@
   // 配置项（兼容旧格式）
   const CONFIG = {
     FAVORITE_TAG_NAME: pluginSettings.favoriteTagName,
+    DISLIKE_TAG_NAME: pluginSettings.dislikeTagName || 'Dislike',
     CHECK_INTERVAL: pluginSettings.checkInterval,
     GRAPHQL_ENDPOINT: '/graphql',
     DEBOUNCE_DELAY: 800,
@@ -68,6 +70,16 @@
   let isScanning = false;
   let scanTimeout = null;
   let batchProcessTimeout = null;
+
+  /** 防抖：通知 EnhancedWallView 瀑布流重排（隐藏/显示 dislike 后递补空缺） */
+  let layoutInvalidateTimer = null;
+  function dispatchLayoutInvalidate() {
+    if (layoutInvalidateTimer) clearTimeout(layoutInvalidateTimer);
+    layoutInvalidateTimer = setTimeout(() => {
+      layoutInvalidateTimer = null;
+      document.dispatchEvent(new CustomEvent('favoriteHeartLayoutInvalidate', { bubbles: true }));
+    }, 280);
+  }
 
   /**
    * 发送GraphQL请求
@@ -130,6 +142,38 @@
       input: { name: CONFIG.FAVORITE_TAG_NAME }
     });
     
+    return createResult?.tagCreate?.id;
+  }
+
+  /**
+   * 获取或创建「不喜欢」标签
+   */
+  async function getDislikeTag() {
+    const findQuery = `
+      query FindTags($filter: String!) {
+        findTags(tag_filter: { name: { value: $filter, modifier: EQUALS } }) {
+          tags {
+            id
+            name
+          }
+        }
+      }
+    `;
+    const findResult = await graphqlRequest(findQuery, { filter: CONFIG.DISLIKE_TAG_NAME });
+    if (findResult?.findTags?.tags?.length > 0) {
+      return findResult.findTags.tags[0].id;
+    }
+    const createQuery = `
+      mutation TagCreate($input: TagCreateInput!) {
+        tagCreate(input: $input) {
+          id
+          name
+        }
+      }
+    `;
+    const createResult = await graphqlRequest(createQuery, {
+      input: { name: CONFIG.DISLIKE_TAG_NAME }
+    });
     return createResult?.tagCreate?.id;
   }
 
@@ -427,7 +471,48 @@
   }
 
   /**
-   * 处理红心点击
+   * 检查是否已标记为不喜欢
+   */
+  async function checkIfDisliked(type, id) {
+    let query;
+    switch(type) {
+      case 'scenes':
+        query = `
+          query FindScene($id: ID!) {
+            findScene(id: $id) {
+              tags { name }
+            }
+          }
+        `;
+        break;
+      case 'images':
+        query = `
+          query FindImage($id: ID!) {
+            findImage(id: $id) {
+              tags { name }
+            }
+          }
+        `;
+        break;
+      case 'galleries':
+        query = `
+          query FindGallery($id: ID!) {
+            findGallery(id: $id) {
+              tags { name }
+            }
+          }
+        `;
+        break;
+      default:
+        return false;
+    }
+    const result = await graphqlRequest(query, { id });
+    const tags = result?.[`find${type.slice(0, -1).charAt(0).toUpperCase() + type.slice(1, -1)}`]?.tags || [];
+    return tags.some(tag => tag.name === CONFIG.DISLIKE_TAG_NAME);
+  }
+
+  /**
+   * 处理红心点击（like/dislike 互斥：同一项只能 like 或 dislike 或不标记）
    */
   async function handleHeartClick(event, button, card, cardInfo = null) {
     event.preventDefault();
@@ -435,11 +520,7 @@
     
     const isFavorited = button.classList.contains('favorited');
     
-    // 如果没有传入cardInfo，尝试提取
-    if (!cardInfo) {
-      cardInfo = extractIdFromCard(card);
-    }
-    
+    if (!cardInfo) cardInfo = extractIdFromCard(card);
     if (!cardInfo) {
       console.error('无法提取卡片ID');
       return;
@@ -448,8 +529,8 @@
     button.classList.add('loading');
     
     try {
-      const tagId = await getFavoriteTag();
-      if (!tagId) {
+      const favoriteTagId = await getFavoriteTag();
+      if (!favoriteTagId) {
         alert('无法创建或获取"精选集"标签');
         return;
       }
@@ -457,44 +538,108 @@
       let success = false;
       
       if (!isFavorited) {
-        // 添加收藏
-        switch(cardInfo.type) {
-          case 'scenes':
-            success = await addTagToScene(cardInfo.id, tagId);
-            break;
-          case 'images':
-            success = await addTagToImage(cardInfo.id, tagId);
-            break;
-          case 'galleries':
-            success = await addTagToGallery(cardInfo.id, tagId);
-            break;
+        // 添加收藏前先移除 dislike 标签，保证互斥
+        const dislikeTagId = await getDislikeTag();
+        if (dislikeTagId) {
+          switch (cardInfo.type) {
+            case 'scenes': await removeTagFromScene(cardInfo.id, dislikeTagId); break;
+            case 'images': await removeTagFromImage(cardInfo.id, dislikeTagId); break;
+            case 'galleries': await removeTagFromGallery(cardInfo.id, dislikeTagId); break;
+          }
         }
-        
+        switch (cardInfo.type) {
+          case 'scenes': success = await addTagToScene(cardInfo.id, favoriteTagId); break;
+          case 'images': success = await addTagToImage(cardInfo.id, favoriteTagId); break;
+          case 'galleries': success = await addTagToGallery(cardInfo.id, favoriteTagId); break;
+        }
         if (success) {
           button.classList.add('favorited');
-          // console.log('已添加到精选集:', cardInfo);
+          const dislikeBtn = card.querySelector('.favorite-dislike-btn');
+          if (dislikeBtn) dislikeBtn.classList.remove('disliked');
+          if (isSceneOrImage(cardInfo.type)) {
+            const el = card.querySelector('.wall-image-wrapper') || card;
+            el.classList.remove('favorite-heart-has-dislike');
+          }
+          dispatchLayoutInvalidate();
         }
       } else {
-        // 取消收藏 - 移除标签
-        switch(cardInfo.type) {
-          case 'scenes':
-            success = await removeTagFromScene(cardInfo.id, tagId);
-            break;
-          case 'images':
-            success = await removeTagFromImage(cardInfo.id, tagId);
-            break;
-          case 'galleries':
-            success = await removeTagFromGallery(cardInfo.id, tagId);
-            break;
+        switch (cardInfo.type) {
+          case 'scenes': success = await removeTagFromScene(cardInfo.id, favoriteTagId); break;
+          case 'images': success = await removeTagFromImage(cardInfo.id, favoriteTagId); break;
+          case 'galleries': success = await removeTagFromGallery(cardInfo.id, favoriteTagId); break;
         }
-        
-        if (success) {
-          button.classList.remove('favorited');
-          // console.log('已从精选集移除:', cardInfo);
-        }
+        if (success) button.classList.remove('favorited');
       }
     } catch (error) {
       console.error('操作失败:', error);
+      alert('操作失败，请查看控制台');
+    } finally {
+      button.classList.remove('loading');
+    }
+  }
+
+  /**
+   * 处理心碎（不喜欢）点击（like/dislike 互斥：同一项只能 like 或 dislike 或不标记）
+   */
+  async function handleDislikeClick(event, button, card, cardInfo = null) {
+    event.preventDefault();
+    event.stopPropagation();
+    const isDisliked = button.classList.contains('disliked');
+    if (!cardInfo) cardInfo = extractIdFromCard(card);
+    if (!cardInfo) {
+      console.error('[FavoriteHeart] 无法提取卡片ID');
+      return;
+    }
+    button.classList.add('loading');
+    try {
+      const dislikeTagId = await getDislikeTag();
+      if (!dislikeTagId) {
+        alert('无法创建或获取「' + CONFIG.DISLIKE_TAG_NAME + '」标签');
+        return;
+      }
+      let success = false;
+      if (!isDisliked) {
+        // 添加不喜欢前先移除 like 标签，保证互斥
+        const favoriteTagId = await getFavoriteTag();
+        if (favoriteTagId) {
+          switch (cardInfo.type) {
+            case 'scenes': await removeTagFromScene(cardInfo.id, favoriteTagId); break;
+            case 'images': await removeTagFromImage(cardInfo.id, favoriteTagId); break;
+            case 'galleries': await removeTagFromGallery(cardInfo.id, favoriteTagId); break;
+          }
+        }
+        switch (cardInfo.type) {
+          case 'scenes': success = await addTagToScene(cardInfo.id, dislikeTagId); break;
+          case 'images': success = await addTagToImage(cardInfo.id, dislikeTagId); break;
+          case 'galleries': success = await addTagToGallery(cardInfo.id, dislikeTagId); break;
+        }
+        if (success) {
+          button.classList.add('disliked');
+          const heartBtn = card.querySelector('.favorite-heart-btn');
+          if (heartBtn) heartBtn.classList.remove('favorited');
+          if (isSceneOrImage(cardInfo.type)) {
+            const el = card.querySelector('.wall-image-wrapper') || card;
+            el.classList.add('favorite-heart-has-dislike');
+          }
+          dispatchLayoutInvalidate();
+        }
+      } else {
+        switch (cardInfo.type) {
+          case 'scenes': success = await removeTagFromScene(cardInfo.id, dislikeTagId); break;
+          case 'images': success = await removeTagFromImage(cardInfo.id, dislikeTagId); break;
+          case 'galleries': success = await removeTagFromGallery(cardInfo.id, dislikeTagId); break;
+        }
+        if (success) {
+          button.classList.remove('disliked');
+          if (isSceneOrImage(cardInfo.type)) {
+            const el = card.querySelector('.wall-image-wrapper') || card;
+            el.classList.remove('favorite-heart-has-dislike');
+          }
+          dispatchLayoutInvalidate();
+        }
+      }
+    } catch (error) {
+      console.error('[FavoriteHeart] 不喜欢操作失败:', error);
       alert('操作失败，请查看控制台');
     } finally {
       button.classList.remove('loading');
@@ -515,6 +660,43 @@
       }
     }
     return false;
+  }
+
+  /**
+   * 检查当前是否在「不喜欢」tag 页面（带 dislike 标记的照片/视频仅在此页可见）
+   */
+  function isInDislikeTagPage() {
+    const path = window.location.pathname;
+    if (path.includes('/tags/')) {
+      const pageTitle = document.querySelector('h2, h1');
+      if (pageTitle && pageTitle.textContent.includes(CONFIG.DISLIKE_TAG_NAME)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 是否为照片/视频（仅对 scenes/images 隐藏 dislike，图库等不隐藏）
+   */
+  function isSceneOrImage(typeOrCard) {
+    if (typeof typeOrCard === 'string') {
+      return typeOrCard === 'scenes' || typeOrCard === 'images';
+    }
+    const el = typeOrCard;
+    return el && (el.classList.contains('scene-card') || el.classList.contains('image-card') || el.classList.contains('enhanced-wall-item'));
+  }
+
+  /**
+   * 根据是否在 Dislike 标签页，更新 body 类以控制“隐藏带 dislike 的照片/视频”
+   */
+  function updateBodyClassForDislikeVisibility() {
+    if (isInDislikeTagPage()) {
+      document.body.classList.remove('favorite-heart-hide-disliked');
+    } else {
+      document.body.classList.add('favorite-heart-hide-disliked');
+    }
+    dispatchLayoutInvalidate();
   }
 
   /**
@@ -573,27 +755,53 @@
     heartButton.title = '添加到精选集';
     heartButton.setAttribute('aria-label', '收藏');
     
-    // 如果在"精选集"tag页面，直接标记为已收藏，不发送请求
+    // 心碎（不喜欢）按钮 - 红心正下方，与红心互斥
+    const dislikeButton = document.createElement('button');
+    dislikeButton.className = 'favorite-dislike-btn';
+    dislikeButton.title = '标记为不喜欢';
+    dislikeButton.setAttribute('aria-label', '不喜欢');
+
+    // like/dislike 互斥：只检查一次，至多显示其一；仅照片/视频参与“隐藏 dislike”逻辑
+    const markDisliked = () => {
+      dislikeButton.classList.add('disliked');
+      if (isSceneOrImage(cardInfo.type)) {
+        wrapper.classList.add('favorite-heart-has-dislike');
+        dispatchLayoutInvalidate();
+      }
+    };
     if (isInFavoriteTagPage()) {
       heartButton.classList.add('favorited');
+    } else if (isInDislikeTagPage()) {
+      markDisliked();
     } else {
-      // 延迟检查收藏状态，避免阻塞UI
       setTimeout(async () => {
-        const isFavorited = await checkIfFavorited(cardInfo.type, cardInfo.id);
+        const [isFavorited, isDisliked] = await Promise.all([
+          checkIfFavorited(cardInfo.type, cardInfo.id),
+          checkIfDisliked(cardInfo.type, cardInfo.id)
+        ]);
         if (isFavorited) {
           heartButton.classList.add('favorited');
+        } else if (isDisliked) {
+          markDisliked();
         }
       }, 100);
     }
     
-    // 添加点击事件
     heartButton.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       handleHeartClick(e, heartButton, wrapper, cardInfo);
     });
-    
-    wrapper.appendChild(heartButton);
+    dislikeButton.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleDislikeClick(e, dislikeButton, wrapper, cardInfo);
+    });
+    const actionsWrap = document.createElement('div');
+    actionsWrap.className = 'favorite-heart-actions';
+    actionsWrap.appendChild(heartButton);
+    actionsWrap.appendChild(dislikeButton);
+    wrapper.appendChild(actionsWrap);
   }
 
   /**
@@ -623,40 +831,60 @@
     
     if (!thumbnailSection) return;
     
-    // 检查是否已经添加过按钮
-    if (thumbnailSection.querySelector('.favorite-heart-btn')) return;
-    
-    // 创建红心按钮
+    // 检查是否已经添加过按钮（红心或心碎任一存在即已处理）
+    if (thumbnailSection.querySelector('.favorite-heart-btn') || thumbnailSection.querySelector('.favorite-dislike-btn')) return;
+
+    // 创建红心按钮与心碎按钮（红心正下方，互斥）
     const heartButton = document.createElement('button');
     heartButton.className = 'favorite-heart-btn';
     heartButton.title = '添加到精选集';
     heartButton.setAttribute('aria-label', '收藏');
+    const dislikeButton = document.createElement('button');
+    dislikeButton.className = 'favorite-dislike-btn';
+    dislikeButton.title = '标记为不喜欢';
+    dislikeButton.setAttribute('aria-label', '不喜欢');
     
     // 提取卡片信息
     const cardInfo = extractIdFromCard(card);
-    
-    // 如果在"精选集"tag页面，直接标记为已收藏
+
+    // like/dislike 互斥：只检查一次，至多显示其一；仅照片/视频参与“隐藏 dislike”逻辑
+    const markDisliked = () => {
+      dislikeButton.classList.add('disliked');
+      if (cardInfo && isSceneOrImage(cardInfo.type)) {
+        card.classList.add('favorite-heart-has-dislike');
+        dispatchLayoutInvalidate();
+      }
+    };
     if (isInFavoriteTagPage()) {
       heartButton.classList.add('favorited');
+    } else if (isInDislikeTagPage()) {
+      markDisliked();
     } else if (cardInfo) {
-      // 延迟检查收藏状态，避免阻塞UI
       setTimeout(async () => {
-        const isFavorited = await checkIfFavorited(cardInfo.type, cardInfo.id);
+        const [isFavorited, isDisliked] = await Promise.all([
+          checkIfFavorited(cardInfo.type, cardInfo.id),
+          checkIfDisliked(cardInfo.type, cardInfo.id)
+        ]);
         if (isFavorited) {
           heartButton.classList.add('favorited');
+        } else if (isDisliked) {
+          markDisliked();
         }
       }, 100);
     }
     
-    // 添加点击事件
     heartButton.addEventListener('click', (e) => handleHeartClick(e, heartButton, card));
-    
-    // 插入按钮 - 确保容器有正确的定位
+    dislikeButton.addEventListener('click', (e) => handleDislikeClick(e, dislikeButton, card));
+
+    const actionsWrap = document.createElement('div');
+    actionsWrap.className = 'favorite-heart-actions';
+    actionsWrap.appendChild(heartButton);
+    actionsWrap.appendChild(dislikeButton);
     const currentPosition = window.getComputedStyle(thumbnailSection).position;
     if (currentPosition === 'static') {
       thumbnailSection.style.position = 'relative';
     }
-    thumbnailSection.appendChild(heartButton);
+    thumbnailSection.appendChild(actionsWrap);
   }
 
   /**
@@ -689,6 +917,9 @@
     if (!shouldEnableHearts()) {
       return;
     }
+    
+    // 非 Dislike 标签页时隐藏带 dislike 的照片/视频，仅在 Dislike 标签页内可见
+    updateBodyClassForDislikeVisibility();
     
     isScanning = true;
     
@@ -754,6 +985,9 @@
    */
   function init() {
     console.log('红心收藏功能已启动');
+    
+    // 先根据当前页决定是否隐藏 dislike（仅照片/视频）
+    updateBodyClassForDislikeVisibility();
     
     // 延迟初始扫描，让页面先加载完成
     setTimeout(() => {
