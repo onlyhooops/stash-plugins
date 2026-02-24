@@ -56,14 +56,22 @@
     debug: false,
   };
 
-  /** 根据 preset 或当前配置返回实际使用的布局参数 */
+  /** 根据 preset 或当前配置返回实际使用的布局参数（行距与列距统一为同一数值，保证视觉一致） */
   function getLayoutParams() {
     const cfg = getConfig();
     const preset = LAYOUT_PRESETS[cfg.layoutPreset];
+    let columnWidth, columnGap, rowGap;
     if (preset) {
-      return { columnWidth: preset.columnWidth, columnGap: preset.columnGap, rowGap: preset.rowGap };
+      columnWidth = preset.columnWidth;
+      columnGap = preset.columnGap;
+      rowGap = preset.rowGap;
+    } else {
+      columnWidth = cfg.columnWidth;
+      columnGap = cfg.columnGap;
+      rowGap = cfg.rowGap;
     }
-    return { columnWidth: cfg.columnWidth, columnGap: cfg.columnGap, rowGap: cfg.rowGap };
+    const gap = Math.round((columnGap + rowGap) / 2);
+    return { columnWidth, columnGap: gap, rowGap: gap };
   }
 
   let _configCache = null;
@@ -208,9 +216,29 @@
       counter.textContent = `${currentIndex + 1} / ${total}`;
       detailLink.href = `/${type}/${id}`;
     };
+    const keyHandler = (e) => {
+      if (!overlay.classList.contains('enhanced-wall-lightbox-visible')) {
+        document.removeEventListener('keydown', keyHandler, true);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        overlay.dispatchEvent(new CustomEvent('lightbox:close'));
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        e.stopPropagation();
+        overlay.dispatchEvent(new CustomEvent('lightbox:prev'));
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        e.stopPropagation();
+        overlay.dispatchEvent(new CustomEvent('lightbox:next'));
+      }
+    };
     overlay.addEventListener('lightbox:close', () => {
       overlay.classList.remove('enhanced-wall-lightbox-visible');
       document.body.style.overflow = '';
+      document.removeEventListener('keydown', keyHandler, true);
       if (overlay._lbMouseMove) document.removeEventListener('mousemove', overlay._lbMouseMove);
       if (overlay._lbMouseUp) document.removeEventListener('mouseup', overlay._lbMouseUp);
     });
@@ -221,12 +249,7 @@
       if (currentIndex < total - 1) { currentIndex++; updateContent(); }
     });
 
-    document.addEventListener('keydown', function keyHandler(e) {
-      if (!overlay.classList.contains('enhanced-wall-lightbox-visible')) { document.removeEventListener('keydown', keyHandler); return; }
-      if (e.key === 'Escape') overlay.dispatchEvent(new CustomEvent('lightbox:close'));
-      else if (e.key === 'ArrowLeft') overlay.dispatchEvent(new CustomEvent('lightbox:prev'));
-      else if (e.key === 'ArrowRight') overlay.dispatchEvent(new CustomEvent('lightbox:next'));
-    });
+    document.addEventListener('keydown', keyHandler, true);
 
     updateContent();
     document.addEventListener('mousemove', overlay._lbMouseMove);
@@ -456,6 +479,7 @@
       element.style.left = `${left}px`;
       element.style.top = `${top}px`;
       element.style.width = `${this.columnWidth}px`;
+      element.style.height = `${itemHeight}px`;
 
       this.columnHeights[columnIndex] += itemHeight + this.rowGap;
       this.items.push({ element, height: itemHeight, columnIndex });
@@ -473,24 +497,13 @@
     }
 
     /**
-     * 是否参与布局（被 FavoriteHeart 隐藏的 dislike 项不占位，由后续项递补）
-     */
-    isItemVisibleForLayout(item) {
-      if (!item?.element) return true;
-      const body = this.container?.ownerDocument?.body || (typeof document !== 'undefined' && document.body);
-      if (!body || !body.classList.contains('favorite-heart-hide-disliked')) return true;
-      return !item.element.classList.contains('favorite-heart-has-dislike');
-    }
-
-    /**
-     * 重新布局所有项目（仅对“可见”项占位，隐藏项不参与以递补空缺）
+     * 重新布局所有项目（dislike 项去色显示，不参与隐藏，无需特殊布局逻辑）
      */
     relayout() {
       this.calculateColumns();
       this.columnHeights = new Array(this.columnCount).fill(0);
 
       for (const item of this.items) {
-        if (!this.isItemVisibleForLayout(item)) continue;
         const columnIndex = this.getShortestColumn();
         const left = columnIndex * (this.columnWidth + this.columnGap);
         const top = this.columnHeights[columnIndex];
@@ -498,6 +511,7 @@
         item.element.style.left = `${left}px`;
         item.element.style.top = `${top}px`;
         item.element.style.width = `${this.columnWidth}px`;
+        item.element.style.height = `${item.height}px`;
 
         item.columnIndex = columnIndex;
         this.columnHeights[columnIndex] += item.height + this.rowGap;
@@ -1989,18 +2003,6 @@
       setTimeout(tryBootstrap, 100);
     }
   }
-
-  // 与 FavoriteHeart 联动：隐藏 dislike 后触发重排，递补空缺
-  document.addEventListener('favoriteHeartLayoutInvalidate', () => {
-    if (enhancedWall?.masonry) {
-      requestAnimationFrame(() => {
-        if (enhancedWall?.masonry) {
-          enhancedWall.masonry.relayout();
-          log('瀑布流已按 FavoriteHeart 可见性重排');
-        }
-      });
-    }
-  });
 
   log('Stash 瀑布流增强预览墙插件已加载');
 })();

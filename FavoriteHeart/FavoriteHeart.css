@@ -290,10 +290,14 @@
   opacity: 1;
 }
 
-/* === 隐藏带 dislike 的照片/视频（仅 scenes/images），仅在 Dislike 标签页内可见 === */
-body.favorite-heart-hide-disliked .scene-card.favorite-heart-has-dislike,
-body.favorite-heart-hide-disliked .image-card.favorite-heart-has-dislike,
-body.favorite-heart-hide-disliked .wall-image-wrapper.favorite-heart-has-dislike,
-body.favorite-heart-hide-disliked .enhanced-wall-item.favorite-heart-has-dislike {
-  display: none !important;
+/* === dislike 项去色显示（不再隐藏） === */
+.scene-card.favorite-heart-has-dislike img,
+.scene-card.favorite-heart-has-dislike video,
+.image-card.favorite-heart-has-dislike img,
+.image-card.favorite-heart-has-dislike video,
+.wall-image-wrapper.favorite-heart-has-dislike img,
+.wall-image-wrapper.favorite-heart-has-dislike video,
+.enhanced-wall-item.favorite-heart-has-dislike .enhanced-wall-media img,
+.enhanced-wall-item.favorite-heart-has-dislike .enhanced-wall-media video {
+  filter: grayscale(100%);
 }

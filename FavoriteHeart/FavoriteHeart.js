@@ -71,16 +71,6 @@
   let scanTimeout = null;
   let batchProcessTimeout = null;
 
-  /** 防抖：通知 EnhancedWallView 瀑布流重排（隐藏/显示 dislike 后递补空缺） */
-  let layoutInvalidateTimer = null;
-  function dispatchLayoutInvalidate() {
-    if (layoutInvalidateTimer) clearTimeout(layoutInvalidateTimer);
-    layoutInvalidateTimer = setTimeout(() => {
-      layoutInvalidateTimer = null;
-      document.dispatchEvent(new CustomEvent('favoriteHeartLayoutInvalidate', { bubbles: true }));
-    }, 280);
-  }
-
   /**
    * 发送GraphQL请求
    */
@@ -560,7 +550,6 @@
             const el = card.querySelector('.wall-image-wrapper') || card;
             el.classList.remove('favorite-heart-has-dislike');
           }
-          dispatchLayoutInvalidate();
         }
       } else {
         switch (cardInfo.type) {
@@ -621,7 +610,6 @@
             const el = card.querySelector('.wall-image-wrapper') || card;
             el.classList.add('favorite-heart-has-dislike');
           }
-          dispatchLayoutInvalidate();
         }
       } else {
         switch (cardInfo.type) {
@@ -635,7 +623,6 @@
             const el = card.querySelector('.wall-image-wrapper') || card;
             el.classList.remove('favorite-heart-has-dislike');
           }
-          dispatchLayoutInvalidate();
         }
       }
     } catch (error) {
@@ -685,18 +672,6 @@
     }
     const el = typeOrCard;
     return el && (el.classList.contains('scene-card') || el.classList.contains('image-card') || el.classList.contains('enhanced-wall-item'));
-  }
-
-  /**
-   * 根据是否在 Dislike 标签页，更新 body 类以控制“隐藏带 dislike 的照片/视频”
-   */
-  function updateBodyClassForDislikeVisibility() {
-    if (isInDislikeTagPage()) {
-      document.body.classList.remove('favorite-heart-hide-disliked');
-    } else {
-      document.body.classList.add('favorite-heart-hide-disliked');
-    }
-    dispatchLayoutInvalidate();
   }
 
   /**
@@ -766,7 +741,6 @@
       dislikeButton.classList.add('disliked');
       if (isSceneOrImage(cardInfo.type)) {
         wrapper.classList.add('favorite-heart-has-dislike');
-        dispatchLayoutInvalidate();
       }
     };
     if (isInFavoriteTagPage()) {
@@ -852,7 +826,6 @@
       dislikeButton.classList.add('disliked');
       if (cardInfo && isSceneOrImage(cardInfo.type)) {
         card.classList.add('favorite-heart-has-dislike');
-        dispatchLayoutInvalidate();
       }
     };
     if (isInFavoriteTagPage()) {
@@ -918,9 +891,6 @@
       return;
     }
     
-    // 非 Dislike 标签页时隐藏带 dislike 的照片/视频，仅在 Dislike 标签页内可见
-    updateBodyClassForDislikeVisibility();
-    
     isScanning = true;
     
     // 清除之前的批处理定时器
@@ -985,9 +955,6 @@
    */
   function init() {
     console.log('红心收藏功能已启动');
-    
-    // 先根据当前页决定是否隐藏 dislike（仅照片/视频）
-    updateBodyClassForDislikeVisibility();
     
     // 延迟初始扫描，让页面先加载完成
     setTimeout(() => {
