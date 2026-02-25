@@ -3,7 +3,7 @@
  * Favorite Heart Plugin for Stash
  * 
  * 功能：为图片/图库/短片/演员/Group添加红心收藏按钮，点击后自动添加指定标签
- * 兼容：网格视图 & 预览墙视图 & 瀑布流增强视图
+ * 兼容：网格视图 & 预览墙视图 & 瀑布流增强视图 (EnhancedWallView) & 砌墙视图 (PowerWall)
  * 
  * 参考文档：https://docs.stashapp.cc/in-app-manual/plugins/ui-plugin-api/
  */
@@ -787,7 +787,11 @@
     
     // 查找缩略图容器
     let thumbnailSection = card.querySelector('.thumbnail-section, .wall-item-container');
-    
+
+    // PowerWall 砌墙视图：使用 .power-wall-media 作为红心挂载点
+    if (!thumbnailSection && card.classList.contains('power-wall-item')) {
+      thumbnailSection = card.querySelector('.power-wall-media') || card;
+    }
     // 瀑布流增强视图：使用 .enhanced-wall-media 作为红心挂载点
     if (!thumbnailSection && card.classList.contains('enhanced-wall-item')) {
       thumbnailSection = card.querySelector('.enhanced-wall-media') || card;
@@ -989,7 +993,7 @@
     });
   }
 
-  // 监听瀑布流增强插件添加的新卡片
+  // 监听瀑布流/砌墙插件添加的新卡片（EnhancedWallView / PowerWall 均派发此事件）
   document.addEventListener('enhancedWallItemAdded', (e) => {
     const { item, data, type } = e.detail;
     if (item && !processedCards.has(item)) {

@@ -1,0 +1,777 @@
+/**
+ * PowerWall — Stash 原生风格砌墙视图样式
+ * 砌墙布局：边距、行距、列距；与 Stash Image Wall 视觉一致
+ */
+
+/* === 抢先隐藏原生墙/网格（仅 /images、/scenes 列表页）=== */
+/* 预占滚动条空间，避免首次渲染时宽度重算导致的闪烁 */
+html.power-wall-preload {
+  scrollbar-gutter: stable;
+}
+html.power-wall-preload .wall,
+html.power-wall-preload .wall-item,
+html.power-wall-preload .flexbin,
+html.power-wall-preload .grid,
+html.power-wall-preload .image-card,
+html.power-wall-preload .scene-card,
+html.power-wall-preload .gallery-card {
+  display: none !important;
+}
+
+/* === 内容区 === */
+.power-wall-active .power-wall-region {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  max-width: 100% !important;
+  overflow-x: hidden;
+}
+
+/* 平缓加载过场：初始透明，首批就绪后淡入，避免切换时闪烁 */
+.power-wall-container {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  padding: 0 4px;
+  margin: 0;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+.power-wall-container.power-wall-ready {
+  opacity: 1;
+}
+
+/* 砌墙容器：相对定位，子项绝对定位由 JS 砌墙引擎控制 */
+.power-wall-masonry {
+  position: relative;
+  min-height: 200px;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: content-box;
+  overflow-x: hidden;
+}
+
+/* === 砌墙单格（Stash 原生风格：.wall-item / .gallery-image）=== */
+.power-wall-item {
+  position: absolute;
+  margin: 0;
+  background: var(--card-bg, #0d0d12);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.power-wall-link {
+  display: block;
+  height: 100%;
+  text-decoration: none;
+  color: inherit;
+}
+
+.power-wall-media {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  line-height: 0;
+}
+
+.power-wall-media img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.power-wall-media img.hidden {
+  opacity: 0;
+}
+
+.power-wall-media video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.power-wall-media video.playing {
+  opacity: 1;
+}
+
+.power-wall-play-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.power-wall-item:hover .power-wall-play-indicator {
+  opacity: 1;
+}
+
+.power-wall-play-indicator .play-icon {
+  display: block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 12px 0 12px 20px;
+  border-color: transparent transparent transparent #fff;
+  margin-left: 4px;
+}
+
+.power-wall-media video.playing ~ .power-wall-play-indicator {
+  opacity: 0 !important;
+}
+
+/* === 信息覆盖层 === */
+.power-wall-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 2rem 0.5rem 0.5rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+  opacity: 0;
+  z-index: 5;
+}
+
+.power-wall-item:hover .power-wall-overlay {
+  opacity: 1;
+}
+
+.power-wall-title {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.2rem;
+}
+
+.power-wall-meta {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.power-wall-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+}
+
+.power-wall-specs {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  display: flex;
+  gap: 0.35rem;
+  z-index: 6;
+}
+
+.power-wall-spec {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 2px #000;
+}
+
+.power-wall-spec.resolution-4k {
+  background: rgba(138, 43, 226, 0.75);
+}
+
+.power-wall-spec.resolution-hd {
+  background: rgba(0, 128, 128, 0.65);
+}
+
+/* === 工具栏（Stash 风格：与 ListViewOptions / ZoomSlider 一致）=== */
+.power-wall-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.4rem 1rem;
+  margin-bottom: 0.25rem;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(31, 36, 59, 0.65);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.power-wall-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.power-wall-search {
+  width: 180px;
+  max-width: 100%;
+  padding: 0.3rem 0.6rem;
+  background: var(--bs-body-bg, #1a1a2e65);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-color, #fff);
+  font-size: 0.85rem;
+}
+
+.power-wall-search::placeholder {
+  color: var(--text-muted, #666);
+}
+
+.power-wall-search:focus {
+  outline: none;
+  border-color: var(--bs-primary, #0d6efd);
+}
+
+.power-wall-count {
+  font-size: 0.9rem;
+  color: var(--text-muted, #888);
+  font-weight: 500;
+}
+
+/* 缩放滑块：仅滑块，无“缩小/放大”文字 */
+.power-wall-toolbar-zoom {
+  display: flex;
+  align-items: center;
+}
+
+.power-wall-zoom-slider {
+  width: 72px;
+  max-width: 72px;
+  accent-color: var(--primary, #137cbd);
+  cursor: pointer;
+}
+
+.power-wall-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.power-wall-toggle-btn {
+  padding: 0.35rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-color, #fff);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.power-wall-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* 防止 lightbox 开关时因滚动条显隐导致布局抖动 */
+body.power-wall-active {
+  scrollbar-gutter: stable;
+}
+
+/* === 激活时隐藏原生墙/网格 === */
+.power-wall-active .power-wall-region .wall,
+.power-wall-active .power-wall-region .wall-item,
+.power-wall-active .power-wall-region .flexbin,
+.power-wall-active .power-wall-region .grid,
+.power-wall-active .power-wall-region .image-card,
+.power-wall-active .power-wall-region .scene-card,
+.power-wall-active .power-wall-region .gallery-card {
+  display: none !important;
+}
+
+.power-wall-active .power-wall-region .power-wall-container ~ * {
+  display: none !important;
+}
+
+.power-wall-active .power-wall-region .power-wall-mount ~ * {
+  display: none !important;
+}
+
+/* === 加载状态 === */
+.power-wall-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  color: var(--text-muted, #888);
+  font-size: 0.85rem;
+}
+
+.power-wall-loading-spinner {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--primary, #137cbd);
+  border-radius: 50%;
+  animation: power-wall-spin 0.8s linear infinite;
+}
+
+@keyframes power-wall-spin {
+  to { transform: rotate(360deg); }
+}
+
+.power-wall-end {
+  text-align: center;
+  padding: 1rem 2rem;
+  color: var(--text-muted, #888);
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.power-wall-error {
+  text-align: center;
+  padding: 1rem 2rem;
+  color: #f5576c;
+  font-size: 0.9rem;
+  background: rgba(245, 87, 108, 0.1);
+  border-radius: 8px;
+}
+
+/* === 设置/筛选面板 === */
+.power-wall-settings-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.power-wall-settings-modal[style*="flex"] {
+  display: flex !important;
+}
+
+.power-wall-settings-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.power-wall-settings-panel {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow: hidden;
+  background: var(--card-bg, #1a1a2e);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.power-wall-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color, #333);
+  flex-shrink: 0;
+}
+
+.power-wall-settings-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-color, #fff);
+}
+
+.power-wall-settings-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #888);
+  font-size: 1.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.power-wall-settings-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.power-wall-settings-body {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.power-wall-settings-section {
+  margin-bottom: 1.25rem;
+}
+
+.power-wall-settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.power-wall-settings-section h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.power-wall-settings-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--bs-body-bg, #0d0d12);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  color: var(--text-color, #fff);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.power-wall-settings-select:focus {
+  outline: none;
+  border-color: var(--primary, #137cbd);
+}
+
+.power-wall-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.power-wall-settings-row:last-child {
+  margin-bottom: 0;
+}
+
+.power-wall-settings-row label {
+  font-size: 0.9rem;
+  color: var(--text-color, #fff);
+  flex: 1;
+  min-width: 0;
+}
+
+.power-wall-settings-row input[type="number"] {
+  width: 100px;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  color: var(--text-color, #fff);
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.power-wall-settings-row.power-wall-settings-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.power-wall-settings-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary, #137cbd);
+}
+
+.power-wall-settings-footer {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border-color, #333);
+  flex-shrink: 0;
+}
+
+.power-wall-settings-btn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  color: var(--text-color, #fff);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.power-wall-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.power-wall-settings-btn.primary {
+  background: var(--primary, #137cbd);
+  border-color: var(--primary, #137cbd);
+}
+
+.power-wall-settings-btn.primary:hover {
+  background: #1a8fd4;
+  border-color: #1a8fd4;
+}
+
+.power-wall-filter-panel {
+  max-width: 380px;
+}
+
+.power-wall-filter-input,
+.power-wall-filter-select {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background: var(--bs-body-bg, #0d0d12);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-color, #fff);
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.power-wall-filter-list {
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 0.4rem 0;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.power-wall-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-color, #fff);
+}
+
+.power-wall-filter-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.power-wall-filter-empty {
+  display: block;
+  padding: 0.5rem 0.6rem;
+  color: var(--text-muted, #666);
+  font-size: 0.85rem;
+}
+
+.power-wall-filter-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.power-wall-filter-row .power-wall-filter-select {
+  flex: 1;
+}
+
+.power-wall-settings-advanced {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.power-wall-settings-advanced summary {
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: var(--text-muted, #888);
+}
+
+/* === 内置 Lightbox === */
+.power-wall-lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+.power-wall-lightbox.power-wall-lightbox-visible {
+  display: block;
+  pointer-events: auto;
+}
+
+.power-wall-lightbox-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  cursor: pointer;
+  z-index: 0;
+}
+
+.power-wall-lightbox-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  z-index: 2;
+}
+
+.power-wall-lightbox-counter {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.power-wall-lightbox-close {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.power-wall-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.power-wall-lightbox-prev,
+.power-wall-lightbox-next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.power-wall-lightbox-prev:hover,
+.power-wall-lightbox-next:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.power-wall-lightbox-prev {
+  left: 1rem;
+}
+
+.power-wall-lightbox-next {
+  right: 1rem;
+}
+
+.power-wall-lightbox-content {
+  position: absolute;
+  inset: 4rem 5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  cursor: grab;
+  z-index: 1;
+}
+
+.power-wall-lightbox-content:active {
+  cursor: grabbing;
+}
+
+.power-wall-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  will-change: transform;
+  transform-origin: center center;
+}
+
+.power-wall-lightbox-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  z-index: 2;
+}
+
+.power-wall-lightbox-detail {
+  font-size: 0.9rem;
+  color: var(--primary, #137cbd);
+  text-decoration: none;
+}
+
+.power-wall-lightbox-detail:hover {
+  text-decoration: underline;
+}
+
+/* === 响应式 === */
+@media (max-width: 768px) {
+  .power-wall-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .power-wall-toolbar-zoom {
+    justify-content: center;
+  }
+  .power-wall-toggle {
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .power-wall-container {
+    transition: none;
+  }
+  .power-wall-item,
+  .power-wall-media img,
+  .power-wall-media video,
+  .power-wall-overlay,
+  .power-wall-play-indicator {
+    transition: none;
+  }
+  .power-wall-loading-spinner {
+    animation: none;
+  }
+}

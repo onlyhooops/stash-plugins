@@ -1,0 +1,19 @@
+/**
+ * GalleryWallCoverFill — Galleries 墙视图封面填充样式
+ *
+ * 仅在 body.gallery-wall-coverfill-active（/galleries 页面）下生效，
+ * 覆盖 .GalleryWallCard-img-contain，使封面图填满固定比例区域(3:2 / 3:4)，消除空缺。
+ *
+ * Stash 实际 DOM: section.GalleryWallCard > img.GalleryWallCard-img.GalleryWallCard-img-contain
+ * 选择器合并，减少规则数量，提升解析与匹配效率。
+ */
+body.gallery-wall-coverfill-active .GalleryWallCard img.GalleryWallCard-img,
+body.gallery-wall-coverfill-active .GalleryWallCard .GalleryWallCard-img-contain,
+body.gallery-wall-coverfill-active .gallery-card .thumbnail-section img,
+body.gallery-wall-coverfill-active .wall .gallery-card img,
+body.gallery-wall-coverfill-active .flexbin .gallery-card img,
+body.gallery-wall-coverfill-active .wall-item .gallery-card img,
+body.gallery-wall-coverfill-active .gallery-card .wall-item-media img {
+  object-fit: cover !important;
+  object-position: center !important;
+}

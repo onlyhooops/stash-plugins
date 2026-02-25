@@ -290,6 +290,22 @@
   opacity: 1;
 }
 
+/* === PowerWall 砌墙视图 === */
+.power-wall-item .power-wall-media {
+  position: relative;
+}
+
+.power-wall-item .favorite-heart-actions {
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 10;
+}
+
+.power-wall-item:hover .favorite-heart-btn,
+.power-wall-item:hover .favorite-dislike-btn {
+  opacity: 1;
+}
+
 /* === dislike 项去色显示（不再隐藏） === */
 .scene-card.favorite-heart-has-dislike img,
 .scene-card.favorite-heart-has-dislike video,
@@ -298,6 +314,8 @@
 .wall-image-wrapper.favorite-heart-has-dislike img,
 .wall-image-wrapper.favorite-heart-has-dislike video,
 .enhanced-wall-item.favorite-heart-has-dislike .enhanced-wall-media img,
-.enhanced-wall-item.favorite-heart-has-dislike .enhanced-wall-media video {
+.enhanced-wall-item.favorite-heart-has-dislike .enhanced-wall-media video,
+.power-wall-item.favorite-heart-has-dislike .power-wall-media img,
+.power-wall-item.favorite-heart-has-dislike .power-wall-media video {
   filter: grayscale(100%);
 }

@@ -13,6 +13,16 @@
   'use strict';
 
   /**
+   * 与 Stash 前端一致的终端类型检测：小屏或触屏时不运行本插件，保留原生墙/网格体验
+   * - 视口宽度：max-width: 576px 视为移动端
+   * - 触屏：(pointer: coarse)
+   */
+  const isMobileViewport = () => window.matchMedia('only screen and (max-width: 576px)').matches;
+  const isTouchDevice = () => window.matchMedia('(pointer: coarse)').matches;
+  const shouldDisableOnDevice = () => isMobileViewport() || isTouchDevice();
+  if (shouldDisableOnDevice()) return;
+
+  /**
    * 严格路径匹配：仅 /images 或 /scenes 根列表页
    * 明确排除：/tags、/galleries、/performers、/studios、/movies、/markers 及所有详情页
    * 防止在标签、图库、演员等页面误激活

@@ -1,0 +1,8 @@
+name: PowerWall
+description: 砌墙视图（Stash 原生风格）— 边距/行距/列距可调、无限滚动、内置 lightbox、图片/短片列表
+version: 1.2.0
+ui:
+  javascript:
+    - PowerWall.js
+  css:
+    - PowerWall.css
