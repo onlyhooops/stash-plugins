@@ -1,0 +1,819 @@
+/**
+ * Stash 瀑布流增强预览墙插件 - 样式文件
+ * Enhanced Wall View Plugin for Stash
+ */
+
+/* === 抢先隐藏：仅隐藏墙/网格内容，不隐藏筛选条（.filter 等），保持原生筛选可用 === */
+/* 由 JS 根据 path 添加 enhanced-wall-preload，仅作用于 /images、/scenes 列表页 */
+html.enhanced-wall-preload .wall,
+html.enhanced-wall-preload .wall-item,
+html.enhanced-wall-preload .flexbin,
+html.enhanced-wall-preload .grid,
+html.enhanced-wall-preload .image-card,
+html.enhanced-wall-preload .scene-card,
+html.enhanced-wall-preload .gallery-card {
+  display: none !important;
+}
+
+/* 不覆盖 Stash 根容器，保持其窗口自适应；仅约束本插件容器 */
+
+/* === 瀑布流容器 - 全屏平铺，无边距 === */
+.enhanced-wall-container {
+  position: relative;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.enhanced-wall-masonry {
+  position: relative;
+  min-height: 200px;
+  padding: 0 2px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+/* === 瀑布流项目 - 精简效果，原生性能 === */
+.enhanced-wall-item {
+  position: absolute;
+  background: var(--card-bg, #0d0d12);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.enhanced-wall-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+/* === 媒体容器 === */
+.enhanced-wall-media {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #000;
+  line-height: 0;
+}
+
+.enhanced-wall-media img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+}
+
+.enhanced-wall-media img.hidden {
+  opacity: 0;
+}
+
+/* === 视频预览 === */
+.enhanced-wall-media video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.enhanced-wall-media video.playing {
+  opacity: 1;
+}
+
+/* === 视频播放指示器 === */
+.enhanced-wall-play-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 44px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.enhanced-wall-item:hover .enhanced-wall-play-indicator {
+  opacity: 1;
+}
+
+.enhanced-wall-play-indicator .play-icon {
+  display: block;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 12px 0 12px 20px;
+  border-color: transparent transparent transparent #fff;
+  margin-left: 4px;
+}
+
+/* 视频播放时隐藏播放指示器 */
+.enhanced-wall-media video.playing ~ .enhanced-wall-play-indicator {
+  opacity: 0 !important;
+}
+
+/* === 信息覆盖层 === */
+.enhanced-wall-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 2rem 0.5rem 0.5rem;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+  opacity: 0;
+  z-index: 5;
+}
+
+.enhanced-wall-item:hover .enhanced-wall-overlay {
+  opacity: 1;
+}
+
+.enhanced-wall-title {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.2rem;
+}
+
+.enhanced-wall-meta {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.enhanced-wall-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+}
+
+/* === 规格标签（分辨率、时长）=== */
+.enhanced-wall-specs {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  display: flex;
+  gap: 0.35rem;
+  z-index: 6;
+}
+
+.enhanced-wall-spec {
+  padding: 0.2rem 0.4rem;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 3px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.enhanced-wall-spec.resolution-4k {
+  background: rgba(245, 87, 108, 0.9);
+}
+
+.enhanced-wall-spec.resolution-hd {
+  background: rgba(79, 172, 254, 0.9);
+}
+
+.enhanced-wall-spec.duration {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+/* === 加载状态 === */
+.enhanced-wall-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  color: var(--text-muted, #888);
+  font-size: 0.85rem;
+}
+
+.enhanced-wall-loading-spinner {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--primary, #137cbd);
+  border-radius: 50%;
+  animation: enhanced-wall-spin 0.8s linear infinite;
+}
+
+@keyframes enhanced-wall-spin {
+  to { transform: rotate(360deg); }
+}
+
+.enhanced-wall-end {
+  text-align: center;
+  padding: 1rem 2rem;
+  color: var(--text-muted, #888);
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.enhanced-wall-error {
+  text-align: center;
+  padding: 1rem 2rem;
+  color: #f5576c;
+  font-size: 0.9rem;
+  background: rgba(245, 87, 108, 0.1);
+  border-radius: 8px;
+}
+
+/* === 工具栏：贯穿全窗宽度，与 Stash 原生背景和谐 === */
+.enhanced-wall-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 1rem;
+  margin-bottom: 0.25rem;
+  /* 突破父容器 padding，使背景色块贯穿全窗 */
+  width: 100vw;
+  max-width: 100vw;
+  box-sizing: border-box;
+  position: relative;
+  left: 50%;
+  margin-left: -50vw;
+  background: var(--bs-body-bg, var(--card-bg, #0d0d12));
+  border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.enhanced-wall-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.enhanced-wall-search {
+  width: 180px;
+  max-width: 100%;
+  padding: 0.3rem 0.6rem;
+  background: var(--bs-body-bg, #1a1a2e65);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-color, #fff);
+  font-size: 0.85rem;
+}
+
+.enhanced-wall-search::placeholder {
+  color: var(--text-muted, #666);
+}
+
+.enhanced-wall-search:focus {
+  outline: none;
+  border-color: var(--bs-primary, #0d6efd);
+}
+
+.enhanced-wall-count {
+  font-size: 0.9rem;
+  color: var(--text-muted, #888);
+  font-weight: 500;
+}
+
+.enhanced-wall-toggle {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.enhanced-wall-toggle-btn {
+  padding: 0.35rem 0.6rem;
+  background: transparent;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-color, #fff);
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.enhanced-wall-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* === 隐藏原始内容 - 仅作用于 enhanced-wall-region，避免影响 tags/图库等页面的原生墙视图与缩放滑块 === */
+.enhanced-wall-active .enhanced-wall-region .wall,
+.enhanced-wall-active .enhanced-wall-region .wall-item,
+.enhanced-wall-active .enhanced-wall-region .flexbin,
+.enhanced-wall-active .enhanced-wall-region .grid,
+.enhanced-wall-active .enhanced-wall-region .image-card,
+.enhanced-wall-active .enhanced-wall-region .scene-card,
+.enhanced-wall-active .enhanced-wall-region .gallery-card {
+  display: none !important;
+}
+
+.enhanced-wall-active .enhanced-wall-region .enhanced-wall-container ~ * {
+  display: none !important;
+}
+
+.enhanced-wall-active .enhanced-wall-region .enhanced-wall-mount ~ * {
+  display: none !important;
+}
+
+/* === 图片骨架屏 === */
+.enhanced-wall-skeleton {
+  background: linear-gradient(90deg, #1a1a2e 25%, #2a2a3e 50%, #1a1a2e 75%);
+  background-size: 200% 100%;
+  animation: enhanced-wall-skeleton-loading 1.5s infinite;
+}
+
+@keyframes enhanced-wall-skeleton-loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* === 响应式调整 === */
+@media (max-width: 768px) {
+  .enhanced-wall-toolbar {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  
+  .enhanced-wall-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .enhanced-wall-toggle-btn {
+    flex: 1;
+    text-align: center;
+  }
+  
+  .enhanced-wall-play-indicator {
+    width: 44px;
+    height: 44px;
+  }
+  
+  .enhanced-wall-play-indicator .play-icon {
+    border-width: 10px 0 10px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .enhanced-wall-container {
+    padding: 0.5rem;
+  }
+  
+  .enhanced-wall-spec {
+    font-size: 0.6rem;
+    padding: 0.15rem 0.35rem;
+  }
+  
+  .enhanced-wall-title {
+    font-size: 0.75rem;
+  }
+  
+  .enhanced-wall-meta {
+    font-size: 0.6rem;
+    gap: 0.3rem;
+  }
+  
+  .enhanced-wall-meta span {
+    padding: 0.1rem 0.25rem;
+  }
+  
+  .enhanced-wall-overlay {
+    padding: 2rem 0.5rem 0.5rem;
+  }
+}
+
+/* === 暗色主题优化 === */
+@media (prefers-color-scheme: dark) {
+  .enhanced-wall-item {
+    background: var(--card-bg, #1a1a2e);
+  }
+  
+  .enhanced-wall-toolbar {
+    background: var(--bs-body-bg, var(--card-bg, #1a1a2e));
+    border-bottom-color: var(--border-color, rgba(255, 255, 255, 0.08));
+  }
+}
+
+/* === 动画优化 === */
+@media (prefers-reduced-motion: reduce) {
+  .enhanced-wall-item,
+  .enhanced-wall-media img,
+  .enhanced-wall-media video,
+  .enhanced-wall-overlay,
+  .enhanced-wall-play-indicator {
+    transition: none;
+  }
+  
+  .enhanced-wall-loading-spinner {
+    animation: none;
+  }
+}
+
+/* ========================================
+   设置面板 (Settings Panel)
+   ======================================== */
+
+.enhanced-wall-settings-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.enhanced-wall-settings-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.enhanced-wall-settings-panel {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow: hidden;
+  background: var(--card-bg, #1a1a2e);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+}
+
+.enhanced-wall-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color, #333);
+  flex-shrink: 0;
+}
+
+.enhanced-wall-settings-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-color, #fff);
+}
+
+.enhanced-wall-settings-close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #888);
+  font-size: 1.5rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.enhanced-wall-settings-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.enhanced-wall-settings-body {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.enhanced-wall-settings-section {
+  margin-bottom: 1.25rem;
+}
+
+.enhanced-wall-settings-section:last-child {
+  margin-bottom: 0;
+}
+
+/* 筛选面板 */
+.enhanced-wall-filter-panel {
+  max-width: 380px;
+}
+
+.enhanced-wall-filter-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  background: var(--bs-body-bg, #0d0d12);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-color, #fff);
+  font-size: 0.9rem;
+  box-sizing: border-box;
+}
+
+.enhanced-wall-filter-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.enhanced-wall-filter-select {
+  flex: 1;
+  padding: 0.4rem 0.6rem;
+  background: var(--bs-body-bg, #0d0d12);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  color: var(--text-color, #fff);
+  font-size: 0.85rem;
+}
+
+.enhanced-wall-path-select {
+  width: 100%;
+}
+
+.enhanced-wall-path-custom {
+  margin-top: 0.4rem;
+}
+
+.enhanced-wall-filter-list {
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 0.4rem 0;
+  border: 1px solid var(--border-color, #333);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.enhanced-wall-filter-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-color, #fff);
+}
+
+.enhanced-wall-filter-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.enhanced-wall-filter-item input {
+  flex-shrink: 0;
+}
+
+.enhanced-wall-filter-empty {
+  display: block;
+  padding: 0.5rem 0.6rem;
+  color: var(--text-muted, #666);
+  font-size: 0.85rem;
+}
+
+.enhanced-wall-settings-section h4 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted, #888);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.enhanced-wall-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.enhanced-wall-settings-row:last-child {
+  margin-bottom: 0;
+}
+
+.enhanced-wall-settings-row label {
+  font-size: 0.9rem;
+  color: var(--text-color, #fff);
+  flex: 1;
+  min-width: 0;
+}
+
+.enhanced-wall-settings-row input[type="number"] {
+  width: 100px;
+  padding: 0.4rem 0.6rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  color: var(--text-color, #fff);
+  font-size: 0.9rem;
+  text-align: right;
+}
+
+.enhanced-wall-settings-row input[type="number"]:focus {
+  outline: none;
+  border-color: var(--primary, #137cbd);
+}
+
+.enhanced-wall-settings-row.enhanced-wall-settings-checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.enhanced-wall-settings-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary, #137cbd);
+}
+
+.enhanced-wall-settings-footer {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border-color, #333);
+  flex-shrink: 0;
+}
+
+.enhanced-wall-settings-btn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  color: var(--text-color, #fff);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.enhanced-wall-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.enhanced-wall-settings-btn.primary {
+  background: var(--primary, #137cbd);
+  border-color: var(--primary, #137cbd);
+}
+
+.enhanced-wall-settings-btn.primary:hover {
+  background: #1a8fd4;
+  border-color: #1a8fd4;
+}
+
+/* ========================================
+   内置 Lightbox 查看器
+   ======================================== */
+
+.enhanced-wall-lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+.enhanced-wall-lightbox.enhanced-wall-lightbox-visible {
+  display: block;
+  pointer-events: auto;
+}
+
+.enhanced-wall-lightbox-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  cursor: pointer;
+  z-index: 0;
+}
+
+.enhanced-wall-lightbox-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  z-index: 2;
+}
+
+.enhanced-wall-lightbox-counter {
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.enhanced-wall-lightbox-close {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.2s;
+}
+
+.enhanced-wall-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.enhanced-wall-lightbox-prev,
+.enhanced-wall-lightbox-next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 1.5rem;
+  cursor: pointer;
+  z-index: 2;
+  transition: background 0.2s;
+}
+
+.enhanced-wall-lightbox-prev:hover,
+.enhanced-wall-lightbox-next:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.enhanced-wall-lightbox-prev {
+  left: 1rem;
+}
+
+.enhanced-wall-lightbox-next {
+  right: 1rem;
+}
+
+.enhanced-wall-lightbox-content {
+  position: absolute;
+  inset: 4rem 5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  cursor: grab;
+  z-index: 1;
+}
+
+.enhanced-wall-lightbox-content:active {
+  cursor: grabbing;
+}
+
+.enhanced-wall-lightbox-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
+  will-change: transform;
+  transform-origin: center center;
+}
+
+.enhanced-wall-lightbox-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  z-index: 2;
+}
+
+.enhanced-wall-lightbox-detail {
+  font-size: 0.9rem;
+  color: var(--primary, #137cbd);
+  text-decoration: none;
+}
+
+.enhanced-wall-lightbox-detail:hover {
+  text-decoration: underline;
+}
