@@ -202,24 +202,17 @@ html.power-wall-preload .gallery-card {
   text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 2px #000;
 }
 
-.power-wall-spec.resolution-4k {
-  background: rgba(138, 43, 226, 0.75);
-}
-
-.power-wall-spec.resolution-hd {
-  background: rgba(0, 128, 128, 0.65);
-}
-
-/* === 工具栏（Stash 风格：与 ListViewOptions / ZoomSlider 一致）=== */
+/* === 工具栏（Stash 风格，自适应不换行）=== */
 .power-wall-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.5rem;
-  padding: 0.4rem 1rem;
+  padding: 0.4rem 0.75rem;
   margin-bottom: 0.25rem;
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
   background: rgba(31, 36, 59, 0.65);
   -webkit-backdrop-filter: blur(12px);
@@ -230,20 +223,23 @@ html.power-wall-preload .gallery-card {
 .power-wall-toolbar-left {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  flex: 1;
+  gap: 0.6rem;
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
 }
 
 .power-wall-search {
-  width: 180px;
-  max-width: 100%;
-  padding: 0.3rem 0.6rem;
+  width: 140px;
+  min-width: 0;
+  flex-shrink: 0;
+  padding: 0.3rem 0.5rem;
   background: var(--bs-body-bg, #1a1a2e65);
   border: 1px solid var(--border-color, #333);
   border-radius: 4px;
   color: var(--text-color, #fff);
   font-size: 0.85rem;
+  box-sizing: border-box;
 }
 
 .power-wall-search::placeholder {
@@ -256,27 +252,34 @@ html.power-wall-preload .gallery-card {
 }
 
 .power-wall-count {
-  font-size: 0.9rem;
+  flex-shrink: 0;
+  font-size: 0.8rem;
   color: var(--text-muted, #888);
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 12em;
 }
 
 /* 缩放滑块：仅滑块，无“缩小/放大”文字 */
 .power-wall-toolbar-zoom {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .power-wall-zoom-slider {
-  width: 72px;
-  max-width: 72px;
+  width: 64px;
+  min-width: 48px;
   accent-color: var(--primary, #137cbd);
   cursor: pointer;
 }
 
 .power-wall-toggle {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.35rem;
+  flex-shrink: 0;
 }
 
 .power-wall-toggle-btn {
@@ -293,7 +296,35 @@ html.power-wall-preload .gallery-card {
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* 防止 lightbox 开关时因滚动条显隐导致布局抖动 */
+.power-wall-toggle-btn .pw-btn-icon {
+  display: inline;
+}
+
+.power-wall-toggle-btn .pw-btn-text {
+  margin-left: 0.25em;
+}
+
+/* 宽度变小时仅显示图标，宽度足够时显示图标+文字 */
+@media (max-width: 720px) {
+  .power-wall-toggle-btn .pw-btn-text {
+    display: none;
+  }
+  .power-wall-toggle-btn {
+    padding: 0.35rem 0.45rem;
+    min-width: 32px;
+    line-height: 1;
+  }
+  .power-wall-toggle-btn .pw-btn-icon {
+    font-size: 1rem;
+  }
+}
+
+/* 防止 lightbox/rightbox 开关时因滚动条显隐导致布局抖动；预占滚动条空间 */
+/* 必须作用于 html 才能影响视口滚动条（body 的 scrollbar-gutter 不向上层传播） */
+html.power-wall-preload,
+html:has(body.power-wall-active) {
+  scrollbar-gutter: stable;
+}
 body.power-wall-active {
   scrollbar-gutter: stable;
 }
@@ -746,17 +777,90 @@ body.power-wall-active {
   text-decoration: underline;
 }
 
-/* === 响应式 === */
+/* === 返回顶部浮窗（右下角，Stash 原生风格）=== */
+.power-wall-back-to-top {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 40px;
+  padding: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-color, #fff);
+  background: rgba(31, 36, 59, 0.9);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease, background 0.15s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.power-wall-back-to-top:hover {
+  background: rgba(31, 36, 59, 0.95);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.power-wall-back-to-top:active {
+  transform: translateY(8px) scale(0.98);
+}
+
+.power-wall-back-to-top.power-wall-back-to-top-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.power-wall-back-to-top.power-wall-back-to-top-visible:hover {
+  transform: translateY(-2px);
+}
+
+.power-wall-back-to-top.power-wall-back-to-top-visible:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* === 响应式：窄屏时压缩间距与搜索框，尽量保持单行 === */
 @media (max-width: 768px) {
   .power-wall-toolbar {
-    flex-direction: column;
-    align-items: stretch;
+    padding: 0.35rem 0.5rem;
+    gap: 0.4rem;
   }
-  .power-wall-toolbar-zoom {
-    justify-content: center;
+  .power-wall-toolbar-left {
+    gap: 0.4rem;
+  }
+  .power-wall-search {
+    width: 100px;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.8rem;
+  }
+  .power-wall-count {
+    font-size: 0.75rem;
+    max-width: 8em;
+  }
+  .power-wall-zoom-slider {
+    width: 52px;
+    min-width: 40px;
   }
   .power-wall-toggle {
-    justify-content: center;
+    gap: 0.25rem;
+  }
+  .power-wall-toggle-btn {
+    min-width: 28px;
+    padding: 0.3rem 0.35rem;
+  }
+  .power-wall-toggle-btn .pw-btn-icon {
+    font-size: 0.9rem;
   }
 }
 
@@ -773,5 +877,8 @@ body.power-wall-active {
   }
   .power-wall-loading-spinner {
     animation: none;
+  }
+  .power-wall-back-to-top {
+    transition: opacity 0.15s ease, visibility 0.15s ease;
   }
 }

@@ -1,6 +1,6 @@
 /**
  * PowerWall — Stash 原生风格砌墙视图插件
- * @version 1.2.0
+ * @version 1.4.0
  *
  * 砌墙布局：边距(margin)、行距(rowGap)、列距(columnGap)，按行排列、统一行高，
  * 替代自适应瀑布流。支持 /images、/scenes 列表，无限滚动、内置 lightbox、筛选与设置。
@@ -198,6 +198,17 @@
     return { findFilter, imageFilter, sceneFilter };
   }
 
+  /** 数字简写：999→999, 1000→1K, 1742954→1.7M */
+  function formatCountShort(n) {
+    if (n == null || n < 0) return '0';
+    if (n < 1000) return String(n);
+    if (n < 1000000) {
+      const k = n / 1000;
+      return (k % 1 === 0 ? k : k.toFixed(1)) + 'K';
+    }
+    return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+  }
+
   function formatDuration(seconds) {
     if (!seconds) return '';
     const h = Math.floor(seconds / 3600);
@@ -221,6 +232,21 @@
       clearTimeout(timeout);
       timeout = setTimeout(() => func.apply(this, args), wait);
     };
+  }
+
+  /** 主文档滚动条宽度；overflow:hidden 时为 0 */
+  function getScrollbarWidth() {
+    return Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+  }
+
+  /** 视口真实可用宽度（不含滚动条占据空间），用于与容器宽度对齐 */
+  function getViewportAvailableWidth() {
+    return document.documentElement.clientWidth;
+  }
+
+  /** 是否支持 scrollbar-gutter（若支持则 lightbox 勿再加 padding，避免双重补偿导致左移）*/
+  function supportsScrollbarGutterStable() {
+    return typeof CSS !== 'undefined' && CSS.supports && CSS.supports('scrollbar-gutter', 'stable');
   }
 
   // ==================== 内置 Lightbox ====================
@@ -326,7 +352,11 @@
         if (overlay._lbMouseMove) document.removeEventListener('mousemove', overlay._lbMouseMove);
         if (overlay._lbMouseUp) document.removeEventListener('mouseup', overlay._lbMouseUp);
         document.body.style.overflow = '';
-        document.body.style.paddingRight = '';
+        if (overlay._lbAddedPadding) {
+          document.documentElement.style.paddingRight = '';
+          document.body.style.paddingRight = '';
+          overlay._lbAddedPadding = false;
+        }
       };
       overlay.addEventListener('lightbox:close', overlay._lbCloseBound);
       overlay.addEventListener('lightbox:prev', () => {
@@ -340,9 +370,14 @@
     updateContent();
     document.addEventListener('mousemove', overlay._lbMouseMove);
     document.addEventListener('mouseup', overlay._lbMouseUp);
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
     overlay._scrollbarWidth = scrollbarWidth;
-    if (scrollbarWidth > 0) document.body.style.paddingRight = scrollbarWidth + 'px';
+    overlay._lbAddedPadding = false;
+    if (scrollbarWidth > 0 && !supportsScrollbarGutterStable()) {
+      document.documentElement.style.paddingRight = scrollbarWidth + 'px';
+      document.body.style.paddingRight = scrollbarWidth + 'px';
+      overlay._lbAddedPadding = true;
+    }
     document.body.classList.add('power-wall-lightbox-open');
     document.body.style.overflow = 'hidden';
     overlay.classList.add('power-wall-lightbox-visible');
@@ -360,10 +395,11 @@
 
     getContainerWidth() {
       const parent = this.container.parentElement;
-      if (!parent) return window.innerWidth || document.documentElement.clientWidth;
-      const w = parent.clientWidth;
-      if (w > 0) return w;
-      return window.innerWidth || document.documentElement.clientWidth;
+      const viewportW = getViewportAvailableWidth();
+      if (!parent) return viewportW || window.innerWidth;
+      const parentW = parent.clientWidth;
+      if (parentW <= 0) return viewportW || window.innerWidth;
+      return Math.min(parentW, viewportW);
     }
 
     /** 列数：由 zoomIndex 偏好列宽决定，与 Stash zoomWidths 一致 */
@@ -603,15 +639,66 @@
         });
       }, 150);
       window.addEventListener('resize', this.resizeHandler);
-      if (this.wallContainer && typeof ResizeObserver !== 'undefined') {
-        this.resizeObserver = new ResizeObserver(() => this.resizeHandler());
-        this.resizeObserver.observe(this.wallContainer.parentElement || this.wallContainer);
+      if (typeof ResizeObserver !== 'undefined') {
+        const onResize = () => this.resizeHandler();
+        this.resizeObserver = new ResizeObserver(onResize);
+        if (this.wallContainer) {
+          this.resizeObserver.observe(this.wallContainer.parentElement || this.wallContainer);
+        }
+        if (this.regionElement) this.resizeObserver.observe(this.regionElement);
+        this.resizeObserver.observe(document.documentElement);
+      }
+      this._lastScrollbarW = getScrollbarWidth();
+      this._viewportCheck = setInterval(() => {
+        if (!this.isEnabled || !this.brickWall) return;
+        const now = getScrollbarWidth();
+        if (now !== this._lastScrollbarW) {
+          this._lastScrollbarW = now;
+          this.resizeHandler();
+        }
+      }, 200);
+      this.createBackToTopButton();
+    }
+
+    createBackToTopButton() {
+      let btn = document.getElementById('power-wall-back-to-top');
+      if (btn) return;
+      btn = document.createElement('button');
+      btn.id = 'power-wall-back-to-top';
+      btn.type = 'button';
+      btn.className = 'power-wall-back-to-top';
+      btn.title = '返回顶部';
+      btn.textContent = 'TOP';
+      btn.setAttribute('aria-label', '返回顶部');
+      const scrollThreshold = 200;
+      const updateVisibility = () => {
+        if (!btn?.isConnected || !this.isEnabled) return;
+        const y = window.scrollY || document.documentElement.scrollTop;
+        if (y > scrollThreshold) btn.classList.add('power-wall-back-to-top-visible');
+        else btn.classList.remove('power-wall-back-to-top-visible');
+      };
+      btn.addEventListener('click', () => {
+        (document.scrollingElement || document.documentElement).scrollTo({ top: 0, behavior: 'smooth' });
+      });
+      this._backToTopScroll = () => { if (this.isEnabled) updateVisibility(); };
+      window.addEventListener('scroll', this._backToTopScroll, { passive: true });
+      updateVisibility();
+      document.body.appendChild(btn);
+    }
+
+    destroyBackToTopButton() {
+      const btn = document.getElementById('power-wall-back-to-top');
+      if (btn) btn.remove();
+      if (this._backToTopScroll) {
+        window.removeEventListener('scroll', this._backToTopScroll);
+        this._backToTopScroll = null;
       }
     }
 
     disable() {
       if (!this.isEnabled) return;
       this.isEnabled = false;
+      this.destroyBackToTopButton();
       if (this.abortController) { this.abortController.abort(); this.abortController = null; }
       document.body.classList.remove('power-wall-active');
       document.documentElement.classList.remove('power-wall-preload');
@@ -619,6 +706,7 @@
       if (this.videoPreview) { this.videoPreview.destroy(); this.videoPreview = null; }
       if (this.wallContainer) this.wallContainer.removeEventListener('click', this._boundItemClick);
       if (this.resizeHandler) { window.removeEventListener('resize', this.resizeHandler); this.resizeHandler = null; }
+      if (this._viewportCheck) { clearInterval(this._viewportCheck); this._viewportCheck = null; }
       if (this.resizeObserver) { this.resizeObserver.disconnect(); this.resizeObserver = null; }
       const mountEl = this.container?.closest?.('.power-wall-mount');
       if (mountEl) mountEl.classList.remove('power-wall-mount');
@@ -670,11 +758,11 @@
             <input type="range" class="power-wall-zoom-slider" id="pw-zoom-slider" min="0" max="${zoomMax}" value="${Math.min(cfg.zoomIndex, zoomMax)}" title="缩放">
           </div>
           <div class="power-wall-toggle">
-            <button type="button" class="power-wall-toggle-btn" data-action="random" title="随机">🎲 随览</button>
-            <button type="button" class="power-wall-toggle-btn" data-action="filter" title="筛选">🔍 筛选</button>
-            <button type="button" class="power-wall-toggle-btn" data-action="settings" title="设置">⚙️ 设置</button>
-            <button type="button" class="power-wall-toggle-btn" data-action="refresh" title="刷新">🔄 刷新</button>
-            <button type="button" class="power-wall-toggle-btn" data-action="original" title="原始视图">📋 原始</button>
+            <button type="button" class="power-wall-toggle-btn" data-action="random" title="随机"><span class="pw-btn-icon">🎲</span><span class="pw-btn-text">随览</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="filter" title="筛选"><span class="pw-btn-icon">🔍</span><span class="pw-btn-text">筛选</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="settings" title="设置"><span class="pw-btn-icon">⚙️</span><span class="pw-btn-text">设置</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="refresh" title="刷新"><span class="pw-btn-icon">🔄</span><span class="pw-btn-text">刷新</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="original" title="原始视图"><span class="pw-btn-icon">📋</span><span class="pw-btn-text">原始</span></button>
           </div>
         </div>
         <div class="power-wall-masonry"></div>
@@ -907,7 +995,7 @@
     }
     updateCount() {
       const el = this.container?.querySelector('.power-wall-count');
-      if (el) el.textContent = `已加载 ${this.items.length} / ${this.totalCount} 项`;
+      if (el) el.textContent = `已加载 ${formatCountShort(this.items.length)} / ${formatCountShort(this.totalCount)} 项`;
     }
     showLoading(show) {
       if (this.loadingIndicator) {
@@ -1218,7 +1306,9 @@
     document.body.classList.remove('power-wall-active');
     document.body.classList.remove('power-wall-lightbox-open');
     document.body.style.paddingRight = '';
+    document.documentElement.style.paddingRight = '';
     document.documentElement.classList.remove('power-wall-preload');
+    document.getElementById('power-wall-back-to-top')?.remove();
     const overlay = document.getElementById('power-wall-lightbox-overlay');
     if (overlay?.classList.contains('power-wall-lightbox-visible')) {
       overlay.classList.remove('power-wall-lightbox-visible');
