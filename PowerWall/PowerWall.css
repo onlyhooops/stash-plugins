@@ -229,28 +229,6 @@ html.power-wall-preload .gallery-card {
   overflow: hidden;
 }
 
-.power-wall-search {
-  width: 140px;
-  min-width: 0;
-  flex-shrink: 0;
-  padding: 0.3rem 0.5rem;
-  background: var(--bs-body-bg, #1a1a2e65);
-  border: 1px solid var(--border-color, #333);
-  border-radius: 4px;
-  color: var(--text-color, #fff);
-  font-size: 0.85rem;
-  box-sizing: border-box;
-}
-
-.power-wall-search::placeholder {
-  color: var(--text-muted, #666);
-}
-
-.power-wall-search:focus {
-  outline: none;
-  border-color: var(--bs-primary, #0d6efd);
-}
-
 .power-wall-count {
   flex-shrink: 0;
   font-size: 0.8rem;
@@ -838,11 +816,6 @@ body.power-wall-active {
   }
   .power-wall-toolbar-left {
     gap: 0.4rem;
-  }
-  .power-wall-search {
-    width: 100px;
-    padding: 0.25rem 0.4rem;
-    font-size: 0.8rem;
   }
   .power-wall-count {
     font-size: 0.75rem;

@@ -1,6 +1,6 @@
 /**
  * PowerWall — Stash 原生风格砌墙视图插件
- * @version 1.4.0
+ * @version 1.4.1
  *
  * 砌墙布局：边距(margin)、行距(rowGap)、列距(columnGap)，按行排列、统一行高，
  * 替代自适应瀑布流。支持 /images、/scenes 列表，无限滚动、内置 lightbox、筛选与设置。
@@ -746,12 +746,10 @@
       this.container = document.createElement('div');
       this.container.className = 'power-wall-container';
       const cfg = getConfig();
-      const params = new URLSearchParams(window.location.search);
       const zoomMax = ZOOM_WIDTHS.length - 1;
       this.container.innerHTML = `
         <div class="power-wall-toolbar">
           <div class="power-wall-toolbar-left">
-            <input type="text" class="power-wall-search" id="pw-toolbar-search" placeholder="关键词搜索" value="${(params.get('q') || '').replace(/"/g, '&quot;')}">
             <span class="power-wall-count">加载中...</span>
           </div>
           <div class="power-wall-toolbar-zoom">
@@ -796,18 +794,6 @@
         else if (action === 'random') this.loadRandom();
         else if (action === 'original') this.disable();
       });
-      const searchInput = this.container.querySelector('#pw-toolbar-search');
-      if (searchInput) {
-        const applySearch = () => {
-          const q = searchInput.value.trim();
-          const url = new URL(window.location.href);
-          if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
-          url.searchParams.delete('page');
-          if (url.href !== window.location.href) { window.history.pushState({}, '', url.href); this.refresh(); }
-        };
-        searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') applySearch(); });
-        searchInput.addEventListener('blur', () => applySearch());
-      }
     }
 
     async loadMore() {
@@ -1168,15 +1154,11 @@
         url.searchParams.delete('page');
         window.history.pushState({}, '', url.href);
         modal.style.display = 'none';
-        const searchEl = document.getElementById('pw-toolbar-search');
-        if (searchEl) searchEl.value = q;
         this.refresh();
       };
       const clearFilter = () => {
         window.history.pushState({}, '', window.location.origin + window.location.pathname);
         modal.style.display = 'none';
-        const searchEl = document.getElementById('pw-toolbar-search');
-        if (searchEl) searchEl.value = '';
         this.refresh();
       };
       modal.querySelector('.power-wall-settings-overlay').addEventListener('click', () => { modal.style.display = 'none'; });
