@@ -12,6 +12,12 @@
 (function() {
   'use strict';
 
+  const isZh = () => {
+    const lang = (navigator.language || navigator.userLanguage || document.documentElement?.lang || '').toLowerCase();
+    return lang.startsWith('zh');
+  };
+  const t = (zh, en) => (isZh() ? zh : en);
+
   const isMobile = () => window.matchMedia('only screen and (max-width: 576px)').matches;
   const isTouch = () => window.matchMedia('(pointer: coarse)').matches;
   if (isMobile() || isTouch()) return;
@@ -38,10 +44,11 @@
 
   /** 布局预设：边距、行距、列距 */
   const LAYOUT_PRESETS = {
-    compact:  { margin: 2, rowGap: 2, columnGap: 2, label: '紧凑' },
-    normal:   { margin: 4, rowGap: 4, columnGap: 4, label: '标准' },
-    spacious: { margin: 8, rowGap: 8, columnGap: 8, label: '宽松' },
+    compact:  { margin: 2, rowGap: 2, columnGap: 2, labelZh: '紧凑', labelEn: 'Compact' },
+    normal:   { margin: 4, rowGap: 4, columnGap: 4, labelZh: '标准', labelEn: 'Normal' },
+    spacious: { margin: 8, rowGap: 8, columnGap: 8, labelZh: '宽松', labelEn: 'Spacious' },
   };
+  const getPresetLabel = (p) => p ? t(p.labelZh, p.labelEn) : '';
 
   const DEFAULT_CONFIG = {
     zoomIndex: 2,
@@ -86,7 +93,7 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     } catch (e) {
-      if (typeof console !== 'undefined' && console.warn) console.warn('[PowerWall] 配置保存失败', e);
+      if (typeof console !== 'undefined' && console.warn) console.warn('[PowerWall]', t('配置保存失败', 'Failed to save config'), e);
     }
     _configCache = merged;
     return merged;
@@ -133,13 +140,13 @@
       const result = await response.json();
       if (result.errors) {
         const errMsg = result.errors[0]?.message || JSON.stringify(result.errors);
-        error('GraphQL错误:', errMsg);
+        error(t('GraphQL错误', 'GraphQL error') + ':', errMsg);
         return null;
       }
       return result.data;
     } catch (err) {
       if (err.name === 'AbortError') return null;
-      error('请求失败:', err);
+      error(t('请求失败', 'Request failed') + ':', err);
       return null;
     } finally {
       clearTimeout(timeoutId);
@@ -262,15 +269,15 @@
         <div class="power-wall-lightbox-backdrop"></div>
         <div class="power-wall-lightbox-header">
           <span class="power-wall-lightbox-counter"></span>
-          <button type="button" class="power-wall-lightbox-close" title="关闭 (Esc)">&times;</button>
+          <button type="button" class="power-wall-lightbox-close" title="${t('关闭 (Esc)', 'Close (Esc)')}">&times;</button>
         </div>
-        <button type="button" class="power-wall-lightbox-prev" title="上一张">&#9664;</button>
+        <button type="button" class="power-wall-lightbox-prev" title="${t('上一张', 'Previous')}">&#9664;</button>
         <div class="power-wall-lightbox-content">
           <img class="power-wall-lightbox-img" alt="" draggable="false">
         </div>
-        <button type="button" class="power-wall-lightbox-next" title="下一张">&#9654;</button>
+        <button type="button" class="power-wall-lightbox-next" title="${t('下一张', 'Next')}">&#9654;</button>
         <div class="power-wall-lightbox-footer">
-          <a class="power-wall-lightbox-detail" href="#" target="_blank">查看详情</a>
+          <a class="power-wall-lightbox-detail" href="#" target="_blank">${t('查看详情', 'View details')}</a>
         </div>
       `;
       document.body.appendChild(overlay);
@@ -613,7 +620,7 @@
       if (pluginMount) pluginMount.classList.add('power-wall-mount');
       this.createContainer(pluginMount);
       if (!this.wallContainer) {
-        error('创建容器失败');
+        error(t('创建容器失败', 'Failed to create container'));
         this.isEnabled = false;
         return;
       }
@@ -667,9 +674,9 @@
       btn.id = 'power-wall-back-to-top';
       btn.type = 'button';
       btn.className = 'power-wall-back-to-top';
-      btn.title = '返回顶部';
+      btn.title = t('返回顶部', 'Back to top');
       btn.textContent = 'TOP';
-      btn.setAttribute('aria-label', '返回顶部');
+      btn.setAttribute('aria-label', t('返回顶部', 'Back to top'));
       const scrollThreshold = 200;
       const updateVisibility = () => {
         if (!btn?.isConnected || !this.isEnabled) return;
@@ -742,7 +749,7 @@
         document.querySelector('#root'),
         document.body
       ].find(c => c);
-      if (!targetContainer) { error('找不到容器'); return; }
+      if (!targetContainer) { error(t('找不到容器', 'Container not found')); return; }
       this.container = document.createElement('div');
       this.container.className = 'power-wall-container';
       const cfg = getConfig();
@@ -750,23 +757,23 @@
       this.container.innerHTML = `
         <div class="power-wall-toolbar">
           <div class="power-wall-toolbar-left">
-            <span class="power-wall-count">加载中...</span>
+            <span class="power-wall-count">${t('加载中...', 'Loading...')}</span>
           </div>
           <div class="power-wall-toolbar-zoom">
-            <input type="range" class="power-wall-zoom-slider" id="pw-zoom-slider" min="0" max="${zoomMax}" value="${Math.min(cfg.zoomIndex, zoomMax)}" title="缩放">
+            <input type="range" class="power-wall-zoom-slider" id="pw-zoom-slider" min="0" max="${zoomMax}" value="${Math.min(cfg.zoomIndex, zoomMax)}" title="${t('缩放', 'Zoom')}">
           </div>
           <div class="power-wall-toggle">
-            <button type="button" class="power-wall-toggle-btn" data-action="random" title="随机"><span class="pw-btn-icon">🎲</span><span class="pw-btn-text">随览</span></button>
-            <button type="button" class="power-wall-toggle-btn" data-action="filter" title="筛选"><span class="pw-btn-icon">🔍</span><span class="pw-btn-text">筛选</span></button>
-            <button type="button" class="power-wall-toggle-btn" data-action="settings" title="设置"><span class="pw-btn-icon">⚙️</span><span class="pw-btn-text">设置</span></button>
-            <button type="button" class="power-wall-toggle-btn" data-action="refresh" title="刷新"><span class="pw-btn-icon">🔄</span><span class="pw-btn-text">刷新</span></button>
-            <button type="button" class="power-wall-toggle-btn" data-action="original" title="原始视图"><span class="pw-btn-icon">📋</span><span class="pw-btn-text">原始</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="random" title="${t('随机', 'Random')}"><span class="pw-btn-icon">🎲</span><span class="pw-btn-text">${t('随览', 'Random')}</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="filter" title="${t('筛选', 'Filter')}"><span class="pw-btn-icon">🔍</span><span class="pw-btn-text">${t('筛选', 'Filter')}</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="settings" title="${t('设置', 'Settings')}"><span class="pw-btn-icon">⚙️</span><span class="pw-btn-text">${t('设置', 'Settings')}</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="refresh" title="${t('刷新', 'Refresh')}"><span class="pw-btn-icon">🔄</span><span class="pw-btn-text">${t('刷新', 'Refresh')}</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="original" title="${t('原始视图', 'Original view')}"><span class="pw-btn-icon">📋</span><span class="pw-btn-text">${t('原始', 'Original')}</span></button>
           </div>
         </div>
         <div class="power-wall-masonry"></div>
         <div class="power-wall-loading">
           <div class="power-wall-loading-spinner"></div>
-          <span>加载中...</span>
+          <span>${t('加载中...', 'Loading...')}</span>
         </div>
       `;
       this.wallContainer = this.container.querySelector('.power-wall-masonry');
@@ -814,7 +821,7 @@
         }
         if (this.scroller && !this.scroller.hasMore) this.showEndMessage();
       } catch (err) {
-        error('加载失败:', err);
+        error(t('加载失败', 'Load failed') + ':', err);
         this.showError();
       } finally {
         this.showLoading(false);
@@ -981,24 +988,24 @@
     }
     updateCount() {
       const el = this.container?.querySelector('.power-wall-count');
-      if (el) el.textContent = `已加载 ${formatCountShort(this.items.length)} / ${formatCountShort(this.totalCount)} 项`;
+      if (el) el.textContent = t('已加载', 'Loaded') + ' ' + formatCountShort(this.items.length) + ' / ' + formatCountShort(this.totalCount) + ' ' + t('项', 'items');
     }
     showLoading(show) {
       if (this.loadingIndicator) {
         this.loadingIndicator.style.display = show ? 'flex' : 'none';
-        this.loadingIndicator.innerHTML = '<div class="power-wall-loading-spinner"></div><span>加载中...</span>';
+        this.loadingIndicator.innerHTML = '<div class="power-wall-loading-spinner"></div><span>' + t('加载中...', 'Loading...') + '</span>';
       }
     }
     showEndMessage() {
       if (this.loadingIndicator) {
         this.loadingIndicator.style.display = 'flex';
-        this.loadingIndicator.innerHTML = '<span class="power-wall-end">✨ 已加载全部</span>';
+        this.loadingIndicator.innerHTML = '<span class="power-wall-end">✨ ' + t('已加载全部', 'All loaded') + '</span>';
       }
     }
     showError() {
       if (this.loadingIndicator) {
         this.loadingIndicator.style.display = 'flex';
-        this.loadingIndicator.innerHTML = '<span class="power-wall-error">❌ 加载失败，请刷新</span>';
+        this.loadingIndicator.innerHTML = '<span class="power-wall-error">❌ ' + t('加载失败，请刷新', 'Load failed, please refresh') + '</span>';
       }
     }
     async refresh() {
@@ -1059,42 +1066,42 @@
       modal = document.createElement('div');
       modal.id = 'power-wall-filter-modal';
       modal.className = 'power-wall-settings-modal power-wall-filter-modal';
-      const sortOpts = [['created_at', '创建时间'], ['date', '日期'], ['title', '标题'], ['rating100', '评分'], ['updated_at', '更新时间'], ['random', '随机']];
+      const sortOpts = [['created_at', t('创建时间', 'Created')], ['date', t('日期', 'Date')], ['title', t('标题', 'Title')], ['rating100', t('评分', 'Rating')], ['updated_at', t('更新时间', 'Updated')], ['random', t('随机', 'Random')]];
       modal.innerHTML = `
         <div class="power-wall-settings-overlay"></div>
         <div class="power-wall-settings-panel power-wall-filter-panel">
           <div class="power-wall-settings-header">
-            <h3>🔍 筛选</h3>
+            <h3>🔍 ${t('筛选', 'Filter')}</h3>
             <button type="button" class="power-wall-settings-close" data-action="close">&times;</button>
           </div>
           <div class="power-wall-settings-body">
             <div class="power-wall-settings-section">
-              <h4>关键词</h4>
-              <input type="text" class="power-wall-filter-input" id="pw-filter-q" placeholder="搜索" value="${currentQ.replace(/"/g, '&quot;')}">
+              <h4>${t('关键词', 'Keywords')}</h4>
+              <input type="text" class="power-wall-filter-input" id="pw-filter-q" placeholder="${t('搜索', 'Search')}" value="${currentQ.replace(/"/g, '&quot;')}">
             </div>
             <div class="power-wall-settings-section">
-              <h4>路径</h4>
+              <h4>${t('路径', 'Path')}</h4>
               <select id="pw-filter-path" class="power-wall-filter-select">
-                <option value="">不限</option>
+                <option value="">${t('不限', 'Any')}</option>
               </select>
             </div>
             <div class="power-wall-settings-section">
-              <h4>排序</h4>
+              <h4>${t('排序', 'Sort')}</h4>
               <div class="power-wall-filter-row">
                 <select id="pw-filter-sortby" class="power-wall-filter-select">${sortOpts.map(([v, l]) => `<option value="${v}" ${currentSort === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
                 <select id="pw-filter-sortdir" class="power-wall-filter-select">
-                  <option value="DESC" ${currentSortDir === 'DESC' ? 'selected' : ''}>降序</option>
-                  <option value="ASC" ${currentSortDir === 'ASC' ? 'selected' : ''}>升序</option>
+                  <option value="DESC" ${currentSortDir === 'DESC' ? 'selected' : ''}>${t('降序', 'Desc')}</option>
+                  <option value="ASC" ${currentSortDir === 'ASC' ? 'selected' : ''}>${t('升序', 'Asc')}</option>
                 </select>
               </div>
             </div>
-            <div class="power-wall-settings-section"><h4>标签</h4><div class="power-wall-filter-list" id="pw-filter-tags">加载中...</div></div>
-            <div class="power-wall-settings-section"><h4>演员</h4><div class="power-wall-filter-list" id="pw-filter-performers">加载中...</div></div>
-            <div class="power-wall-settings-section"><h4>工作室</h4><div class="power-wall-filter-list" id="pw-filter-studios">加载中...</div></div>
+            <div class="power-wall-settings-section"><h4>${t('标签', 'Tags')}</h4><div class="power-wall-filter-list" id="pw-filter-tags">${t('加载中...', 'Loading...')}</div></div>
+            <div class="power-wall-settings-section"><h4>${t('演员', 'Performers')}</h4><div class="power-wall-filter-list" id="pw-filter-performers">${t('加载中...', 'Loading...')}</div></div>
+            <div class="power-wall-settings-section"><h4>${t('工作室', 'Studios')}</h4><div class="power-wall-filter-list" id="pw-filter-studios">${t('加载中...', 'Loading...')}</div></div>
           </div>
           <div class="power-wall-settings-footer">
-            <button type="button" class="power-wall-settings-btn" data-action="clearFilter">清除</button>
-            <button type="button" class="power-wall-settings-btn primary" data-action="applyFilter">应用</button>
+            <button type="button" class="power-wall-settings-btn" data-action="clearFilter">${t('清除', 'Clear')}</button>
+            <button type="button" class="power-wall-settings-btn primary" data-action="applyFilter">${t('应用', 'Apply')}</button>
           </div>
         </div>
       `;
@@ -1106,7 +1113,7 @@
         const ids = new Set(parseIdList(currentIds));
         container.innerHTML = items.length
           ? items.map(it => `<label class="power-wall-filter-item"><input type="checkbox" value="${it.id}" ${ids.has(parseInt(it.id, 10)) ? 'checked' : ''}> ${escapeFn(it[nameKey] || it.name || '')}</label>`).join('')
-          : '<span class="power-wall-filter-empty">无</span>';
+          : '<span class="power-wall-filter-empty">' + t('无', 'None') + '</span>';
       };
       this.populateFilterCheckboxes = (m, tagIds, performerIds, studioIds) => {
         ['pw-filter-tags', 'pw-filter-performers', 'pw-filter-studios'].forEach((id, idx) => {
@@ -1130,7 +1137,7 @@
         });
       } catch (e) {
         const tagsEl = modal.querySelector('#pw-filter-tags');
-        if (tagsEl) tagsEl.textContent = '加载失败';
+        if (tagsEl) tagsEl.textContent = t('加载失败', 'Load failed');
       }
       const getSelectedIds = (id) => [...(modal.querySelector('#' + id)?.querySelectorAll('input:checked') || [])].map(cb => cb.value).filter(Boolean);
       const applyFilter = () => {
@@ -1183,42 +1190,42 @@
         <div class="power-wall-settings-overlay"></div>
         <div class="power-wall-settings-panel">
           <div class="power-wall-settings-header">
-            <h3>砌墙设置</h3>
+            <h3>${t('砌墙设置', 'PowerWall Settings')}</h3>
             <button type="button" class="power-wall-settings-close" data-action="close">&times;</button>
           </div>
           <div class="power-wall-settings-body">
             <div class="power-wall-settings-section">
-              <h4>布局预设</h4>
+              <h4>${t('布局预设', 'Layout preset')}</h4>
               <select id="pw-setting-layoutPreset" class="power-wall-settings-select">
-                ${Object.entries(LAYOUT_PRESETS).map(([key, p]) => `<option value="${key}" ${cfg.layoutPreset === key ? 'selected' : ''}>${p.label}</option>`).join('')}
+                ${Object.entries(LAYOUT_PRESETS).map(([key, p]) => `<option value="${key}" ${cfg.layoutPreset === key ? 'selected' : ''}>${getPresetLabel(p)}</option>`).join('')}
               </select>
             </div>
             <div class="power-wall-settings-section">
-              <h4>功能</h4>
+              <h4>${t('功能', 'Features')}</h4>
               <div class="power-wall-settings-row power-wall-settings-checkbox">
-                <label><input type="checkbox" id="pw-setting-enableOnImages" ${cfg.enableOnImages ? 'checked' : ''}> 图片列表启用</label>
+                <label><input type="checkbox" id="pw-setting-enableOnImages" ${cfg.enableOnImages ? 'checked' : ''}> ${t('图片列表启用', 'Enable on Images')}</label>
               </div>
               <div class="power-wall-settings-row power-wall-settings-checkbox">
-                <label><input type="checkbox" id="pw-setting-enableOnScenes" ${cfg.enableOnScenes ? 'checked' : ''}> 短片列表启用</label>
+                <label><input type="checkbox" id="pw-setting-enableOnScenes" ${cfg.enableOnScenes ? 'checked' : ''}> ${t('短片列表启用', 'Enable on Scenes')}</label>
               </div>
               <div class="power-wall-settings-row power-wall-settings-checkbox">
-                <label><input type="checkbox" id="pw-setting-enableLightbox" ${cfg.enableLightbox !== false ? 'checked' : ''}> 点击图片用内置 lightbox</label>
+                <label><input type="checkbox" id="pw-setting-enableLightbox" ${cfg.enableLightbox !== false ? 'checked' : ''}> ${t('点击图片用内置 lightbox', 'Use built-in lightbox for images')}</label>
               </div>
             </div>
             <details class="power-wall-settings-advanced">
-              <summary>高级</summary>
+              <summary>${t('高级', 'Advanced')}</summary>
               <div class="power-wall-settings-row">
-                <label>每页数量</label>
+                <label>${t('每页数量', 'Items per page')}</label>
                 <input type="number" id="pw-setting-itemsPerPage" min="12" max="120" value="${cfg.itemsPerPage}">
               </div>
               <div class="power-wall-settings-row power-wall-settings-checkbox">
-                <label><input type="checkbox" id="pw-setting-debug" ${cfg.debug ? 'checked' : ''}> 调试</label>
+                <label><input type="checkbox" id="pw-setting-debug" ${cfg.debug ? 'checked' : ''}> ${t('调试', 'Debug')}</label>
               </div>
             </details>
           </div>
           <div class="power-wall-settings-footer">
-            <button type="button" class="power-wall-settings-btn" data-action="reset">恢复默认</button>
-            <button type="button" class="power-wall-settings-btn primary" data-action="save">保存并应用</button>
+            <button type="button" class="power-wall-settings-btn" data-action="reset">${t('恢复默认', 'Reset to default')}</button>
+            <button type="button" class="power-wall-settings-btn primary" data-action="save">${t('保存并应用', 'Save & apply')}</button>
           </div>
         </div>
       `;
@@ -1339,5 +1346,5 @@
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => setTimeout(tryBootstrap, 100));
     else setTimeout(tryBootstrap, 100);
   }
-  log('PowerWall 砌墙视图插件已加载');
+  log(t('PowerWall 砌墙视图插件已加载', 'PowerWall brick wall plugin loaded'));
 })();

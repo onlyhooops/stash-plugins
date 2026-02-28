@@ -1,6 +1,6 @@
 name: PowerWall
-description: 砌墙视图（Stash 原生风格）— 边距/行距/列距可调、无限滚动、内置 lightbox、返回顶部、图片/短片列表
-version: 1.4.0
+description: Brick wall view (Stash native style) — adjustable margin/gap, infinite scroll, built-in lightbox, back-to-top. 砌墙视图—边距/行距/列距可调、无限滚动、内置 lightbox、返回顶部
+version: 1.5.0
 ui:
   javascript:
     - PowerWall.js

@@ -1,6 +1,6 @@
 name: GalleryWallCoverFill
-description: Galleries 墙视图封面填充 — 当图库首图比例与固定区域(3:2/3:4)不一致时，自适应填满区域，消除视觉空缺
-version: 1.1.0
+description: Gallery wall cover fill — when gallery cover aspect doesn't match fixed area (3:2/3:4), fill with object-fit:cover. 墙视图封面填充—图库首图比例与固定区域不一致时自适应填满
+version: 1.2.0
 ui:
   javascript:
     - GalleryWallCoverFill.js
