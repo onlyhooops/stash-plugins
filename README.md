@@ -1,13 +1,14 @@
 # Stash 插件仓库
 
-个人维护的 Stash UI 插件，包含 EnhancedWallView 与 FavoriteHeart。
+个人维护的 Stash UI 插件，支持中英文界面。
 
 ## 插件列表
 
 | 插件 | 说明 |
 |------|------|
-| **EnhancedWallView** | 瀑布流布局、无限滚动、内置 lightbox、筛选器、随览、视频悬停预览，兼容 FavoriteHeart |
-| **FavoriteHeart** | 在卡片右上角添加红心收藏按钮，点击后自动添加指定标签 |
+| **FavoriteHeart** | 红心/心碎收藏，like/dislike 互斥；带 dislike 的照片/视频去色显示。Heart/favorite & dislike buttons. |
+| **PowerWall** | 砌墙视图（Stash 原生风格）— 边距/行距/列距可调、无限滚动、内置 lightbox、返回顶部。Brick wall view. |
+| **GalleryWallCoverFill** | Galleries 墙视图封面填充 — 图库首图比例与固定区域不一致时自适应填满。Gallery wall cover fill. |
 
 ## 安装方式
 
@@ -24,7 +25,7 @@
 
 ### 方式二：手动安装
 
-将 `plugins` 目录下对应插件文件夹（如 `EnhancedWallView`）复制到 Stash 的 `plugins` 目录。
+将对应插件文件夹（如 `FavoriteHeart`）复制到 Stash 的 `plugins` 目录。
 
 ## 首次发布步骤
 
@@ -47,16 +48,18 @@
 
 ```
 .
-├── plugins/
-│   ├── EnhancedWallView/
-│   │   ├── EnhancedWallView.yml
-│   │   ├── EnhancedWallView.js
-│   │   ├── EnhancedWallView.css
-│   │   └── README.md
-│   └── FavoriteHeart/
-│       ├── FavoriteHeart.yml
-│       ├── FavoriteHeart.js
-│       └── FavoriteHeart.css
+├── FavoriteHeart/
+│   ├── FavoriteHeart.yml
+│   ├── FavoriteHeart.js
+│   └── FavoriteHeart.css
+├── PowerWall/
+│   ├── PowerWall.yml
+│   ├── PowerWall.js
+│   └── PowerWall.css
+├── GalleryWallCoverFill/
+│   ├── GalleryWallCoverFill.yml
+│   ├── GalleryWallCoverFill.js
+│   └── GalleryWallCoverFill.css
 ├── build_site.sh
 ├── .github/workflows/deploy.yml
 └── README.md

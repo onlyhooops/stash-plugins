@@ -11,6 +11,13 @@
 (function() {
   'use strict';
 
+  // 简单位语言检测：优先中文
+  const isZh = () => {
+    const lang = (navigator.language || navigator.userLanguage || document.documentElement?.lang || '').toLowerCase();
+    return lang.startsWith('zh');
+  };
+  const t = (zh, en) => (isZh() ? zh : en);
+
   // 从 Stash 插件系统获取配置
   const getPluginConfig = () => {
     const defaultConfig = {
@@ -31,7 +38,7 @@
         return { ...defaultConfig, ...pluginConfig };
       }
     } catch (e) {
-      console.warn('[FavoriteHeart] 无法获取插件配置，使用默认值:', e);
+      console.warn('[FavoriteHeart] ' + t('无法获取插件配置，使用默认值', 'Cannot get plugin config, using defaults') + ':', e);
     }
 
     return defaultConfig;
@@ -86,12 +93,12 @@
       
       const result = await response.json();
       if (result.errors) {
-        console.error('GraphQL错误:', result.errors);
+        console.error(t('GraphQL错误', 'GraphQL error') + ':', result.errors);
         return null;
       }
       return result.data;
     } catch (error) {
-      console.error('请求失败:', error);
+      console.error(t('请求失败', 'Request failed') + ':', error);
       return null;
     }
   }
@@ -512,7 +519,7 @@
     
     if (!cardInfo) cardInfo = extractIdFromCard(card);
     if (!cardInfo) {
-      console.error('无法提取卡片ID');
+      console.error(t('无法提取卡片ID', 'Cannot extract card ID'));
       return;
     }
     
@@ -521,7 +528,7 @@
     try {
       const favoriteTagId = await getFavoriteTag();
       if (!favoriteTagId) {
-        alert('无法创建或获取"精选集"标签');
+        alert(t('无法创建或获取"精选集"标签', 'Cannot create or get favorite tag'));
         return;
       }
       
@@ -560,8 +567,8 @@
         if (success) button.classList.remove('favorited');
       }
     } catch (error) {
-      console.error('操作失败:', error);
-      alert('操作失败，请查看控制台');
+      console.error(t('操作失败', 'Operation failed') + ':', error);
+      alert(t('操作失败，请查看控制台', 'Operation failed, check console'));
     } finally {
       button.classList.remove('loading');
     }
@@ -576,14 +583,14 @@
     const isDisliked = button.classList.contains('disliked');
     if (!cardInfo) cardInfo = extractIdFromCard(card);
     if (!cardInfo) {
-      console.error('[FavoriteHeart] 无法提取卡片ID');
+      console.error('[FavoriteHeart] ' + t('无法提取卡片ID', 'Cannot extract card ID'));
       return;
     }
     button.classList.add('loading');
     try {
       const dislikeTagId = await getDislikeTag();
       if (!dislikeTagId) {
-        alert('无法创建或获取「' + CONFIG.DISLIKE_TAG_NAME + '」标签');
+        alert(t('无法创建或获取「' + CONFIG.DISLIKE_TAG_NAME + '」标签', 'Cannot create or get "' + CONFIG.DISLIKE_TAG_NAME + '" tag'));
         return;
       }
       let success = false;
@@ -626,8 +633,8 @@
         }
       }
     } catch (error) {
-      console.error('[FavoriteHeart] 不喜欢操作失败:', error);
-      alert('操作失败，请查看控制台');
+      console.error('[FavoriteHeart] ' + t('不喜欢操作失败', 'Dislike operation failed') + ':', error);
+      alert(t('操作失败，请查看控制台', 'Operation failed, check console'));
     } finally {
       button.classList.remove('loading');
     }
@@ -727,14 +734,14 @@
     // 创建红心按钮
     const heartButton = document.createElement('button');
     heartButton.className = 'favorite-heart-btn';
-    heartButton.title = '添加到精选集';
-    heartButton.setAttribute('aria-label', '收藏');
+    heartButton.title = t('添加到精选集', 'Add to favorites');
+    heartButton.setAttribute('aria-label', t('收藏', 'Favorite'));
     
     // 心碎（不喜欢）按钮 - 红心正下方，与红心互斥
     const dislikeButton = document.createElement('button');
     dislikeButton.className = 'favorite-dislike-btn';
-    dislikeButton.title = '标记为不喜欢';
-    dislikeButton.setAttribute('aria-label', '不喜欢');
+    dislikeButton.title = t('标记为不喜欢', 'Mark as dislike');
+    dislikeButton.setAttribute('aria-label', t('不喜欢', 'Dislike'));
 
     // like/dislike 互斥：只检查一次，至多显示其一；仅照片/视频参与“隐藏 dislike”逻辑
     const markDisliked = () => {
@@ -815,12 +822,12 @@
     // 创建红心按钮与心碎按钮（红心正下方，互斥）
     const heartButton = document.createElement('button');
     heartButton.className = 'favorite-heart-btn';
-    heartButton.title = '添加到精选集';
-    heartButton.setAttribute('aria-label', '收藏');
+    heartButton.title = t('添加到精选集', 'Add to favorites');
+    heartButton.setAttribute('aria-label', t('收藏', 'Favorite'));
     const dislikeButton = document.createElement('button');
     dislikeButton.className = 'favorite-dislike-btn';
-    dislikeButton.title = '标记为不喜欢';
-    dislikeButton.setAttribute('aria-label', '不喜欢');
+    dislikeButton.title = t('标记为不喜欢', 'Mark as dislike');
+    dislikeButton.setAttribute('aria-label', t('不喜欢', 'Dislike'));
     
     // 提取卡片信息
     const cardInfo = extractIdFromCard(card);
@@ -948,7 +955,7 @@
           isScanning = false;
         }
       } catch (error) {
-        console.error('扫描卡片时出错:', error);
+        console.error(t('扫描卡片时出错', 'Error scanning cards') + ':', error);
         isScanning = false;
       }
     });
@@ -958,7 +965,7 @@
    * 初始化
    */
   function init() {
-    console.log('红心收藏功能已启动');
+    console.log(t('红心收藏功能已启动', '[FavoriteHeart] Heart favorite feature started'));
     
     // 延迟初始扫描，让页面先加载完成
     setTimeout(() => {
@@ -1008,5 +1015,5 @@
     init();
   }
 
-  console.log('❤️ [FavoriteHeart] Stash 红心收藏功能插件已加载');
+  console.log('❤️ [FavoriteHeart] ' + t('Stash 红心收藏功能插件已加载', 'Stash heart favorite plugin loaded'));
 })();
