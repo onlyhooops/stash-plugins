@@ -1,14 +1,14 @@
 # Stash 插件仓库
 
-个人维护的 Stash UI 插件，支持中英文界面。
+个人维护的 Stash UI 插件。
 
 ## 插件列表
 
 | 插件 | 说明 |
 |------|------|
-| **FavoriteHeart** | 红心/心碎收藏，like/dislike 互斥；带 dislike 的照片/视频去色显示。Heart/favorite & dislike buttons. |
-| **PowerWall** | 砌墙视图（Stash 原生风格）— 边距/行距/列距可调、无限滚动、内置 lightbox、返回顶部。Brick wall view. |
-| **GalleryWallCoverFill** | Galleries 墙视图封面填充 — 图库首图比例与固定区域不一致时自适应填满。Gallery wall cover fill. |
+| **FavoriteHeart** | 红心/心碎收藏，like/dislike 互斥；带 dislike 的照片/视频去色显示 |
+| **PowerWall** | 砌墙视图（Stash 原生风格）— 边距/行距/列距可调、无限滚动、内置 lightbox、返回顶部、图片/短片列表 |
+| **GalleryWallCoverFill** | Galleries 墙视图封面填充 — 当图库首图比例与固定区域(3:2/3:4)不一致时，自适应填满区域，消除视觉空缺 |
 
 ## 安装方式
 
