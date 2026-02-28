@@ -1,8 +1,0 @@
-name: FavoriteHeart
-description: 在卡片右上角添加红心收藏按钮，点击后自动添加指定标签
-version: 1.0.0
-ui:
-  javascript:
-    - FavoriteHeart.js
-  css:
-    - FavoriteHeart.css

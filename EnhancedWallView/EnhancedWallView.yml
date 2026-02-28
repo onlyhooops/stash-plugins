@@ -1,8 +1,0 @@
-name: EnhancedWallView
-description: 图片/短片列表瀑布流、无限滚动、内置 lightbox、筛选与视频悬停预览
-version: 1.4.0
-ui:
-  javascript:
-    - EnhancedWallView.js
-  css:
-    - EnhancedWallView.css
