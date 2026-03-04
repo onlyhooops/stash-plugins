@@ -1,6 +1,6 @@
 /**
  * PowerWall — Stash 原生风格砌墙视图插件
- * @version 1.4.1
+ * @version 1.4.3
  *
  * 砌墙布局：边距(margin)、行距(rowGap)、列距(columnGap)，按行排列、统一行高，
  * 替代自适应瀑布流。支持 /images、/scenes 列表，无限滚动、内置 lightbox、筛选与设置。
@@ -36,8 +36,9 @@
   /** 缩放档位列宽（像素），0=最小/多列 … 5=最大/少列 */
   const ZOOM_WIDTHS = [160, 220, 280, 340, 480, 640];
 
-  /** 布局预设：边距、行距、列距 */
+  /** 布局预设：边距、行距、列距（无缝：无间距；紧凑之上） */
   const LAYOUT_PRESETS = {
+    seamless: { margin: 0, rowGap: 0, columnGap: 0, label: '无缝' },
     compact:  { margin: 2, rowGap: 2, columnGap: 2, label: '紧凑' },
     normal:   { margin: 4, rowGap: 4, columnGap: 4, label: '标准' },
     spacious: { margin: 8, rowGap: 8, columnGap: 8, label: '宽松' },
@@ -744,7 +745,7 @@
       ].find(c => c);
       if (!targetContainer) { error('找不到容器'); return; }
       this.container = document.createElement('div');
-      this.container.className = 'power-wall-container';
+      this.container.className = 'power-wall-container' + (getConfig().layoutPreset === 'seamless' ? ' power-wall-seamless' : '');
       const cfg = getConfig();
       const zoomMax = ZOOM_WIDTHS.length - 1;
       this.container.innerHTML = `
@@ -756,7 +757,8 @@
             <input type="range" class="power-wall-zoom-slider" id="pw-zoom-slider" min="0" max="${zoomMax}" value="${Math.min(cfg.zoomIndex, zoomMax)}" title="缩放">
           </div>
           <div class="power-wall-toggle">
-            <button type="button" class="power-wall-toggle-btn" data-action="random" title="随机"><span class="pw-btn-icon">🎲</span><span class="pw-btn-text">随览</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="random" title="随机浏览"><span class="pw-btn-icon">🎲</span><span class="pw-btn-text">随览</span></button>
+            ${this.pageType === 'images' ? '<button type="button" class="power-wall-toggle-btn" data-action="randomGallery" title="随机打开一个图库"><span class="pw-btn-icon">📖</span><span class="pw-btn-text">随阅</span></button>' : ''}
             <button type="button" class="power-wall-toggle-btn" data-action="filter" title="筛选"><span class="pw-btn-icon">🔍</span><span class="pw-btn-text">筛选</span></button>
             <button type="button" class="power-wall-toggle-btn" data-action="settings" title="设置"><span class="pw-btn-icon">⚙️</span><span class="pw-btn-text">设置</span></button>
             <button type="button" class="power-wall-toggle-btn" data-action="refresh" title="刷新"><span class="pw-btn-icon">🔄</span><span class="pw-btn-text">刷新</span></button>
@@ -792,6 +794,7 @@
         else if (action === 'filter') this.openFilterPanel();
         else if (action === 'refresh') this.refresh();
         else if (action === 'random') this.loadRandom();
+        else if (action === 'randomGallery') this.loadRandomGallery();
         else if (action === 'original') this.disable();
       });
     }
@@ -1016,6 +1019,38 @@
       url.searchParams.set('sortby', 'random_' + Date.now());
       url.searchParams.delete('page');
       window.history.pushState({}, '', url.href);
+      this.refresh();
+    }
+
+    /** 随阅：在当墙内打开一个随机图库里的全部资源（不跳转页面；与随览不同：随览完全随机，随阅随机选图库）*/
+    async loadRandomGallery() {
+      if (this.pageType !== 'images') {
+        error('随阅仅在图片页可用');
+        return;
+      }
+      const query = `query FindGalleries($filter: FindFilterType) {
+        findGalleries(filter: $filter) {
+          count
+          galleries { id title }
+        }
+      }`;
+      const filter = {
+        per_page: 250,
+        page: 1,
+        sort: 'random_' + Date.now(),
+        direction: 'ASC'
+      };
+      const result = await graphqlRequest(query, { filter }, this.abortController?.signal ? { signal: this.abortController.signal } : {});
+      const data = result?.findGalleries;
+      if (!data?.galleries?.length) {
+        error('未找到任何图库');
+        return;
+      }
+      const gallery = data.galleries[Math.floor(Math.random() * data.galleries.length)];
+      const url = new URL('/images', window.location.origin);
+      url.searchParams.set('galleries', String(gallery.id));
+      url.searchParams.delete('page');
+      window.history.pushState({}, '', url.pathname + url.search);
       this.refresh();
     }
 

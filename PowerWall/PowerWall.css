@@ -64,6 +64,11 @@ html.power-wall-preload .gallery-card {
   cursor: pointer;
 }
 
+/* 无缝模式：移除圆角以实现真正无缝拼接 */
+.power-wall-container.power-wall-seamless .power-wall-item {
+  border-radius: 0;
+}
+
 .power-wall-link {
   display: block;
   height: 100%;
