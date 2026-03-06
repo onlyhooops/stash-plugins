@@ -629,7 +629,7 @@ body.power-wall-active {
   color: var(--text-muted, #888);
 }
 
-/* === 内置 Lightbox === */
+/* === 内置 Lightbox（借鉴 Fancybox 的现代风格）=== */
 .power-wall-lightbox {
   display: none;
   position: fixed;
@@ -661,28 +661,48 @@ body.power-wall-active {
   justify-content: space-between;
   padding: 0.75rem 1rem;
   z-index: 2;
+  gap: 0.75rem;
 }
 
 .power-wall-lightbox-counter {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: rgba(255, 255, 255, 0.9);
+  font-variant-numeric: tabular-nums;
 }
 
+.power-wall-lightbox-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.power-wall-lightbox-btn,
 .power-wall-lightbox-close {
   width: 40px;
   height: 40px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   border: none;
-  border-radius: 8px;
-  color: #fff;
-  font-size: 1.5rem;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.1rem;
   cursor: pointer;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
 }
 
+.power-wall-lightbox-btn:hover,
 .power-wall-lightbox-close:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.power-wall-lightbox-btn[data-action="toggle-1to1"] {
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 
 .power-wall-lightbox-prev,
@@ -690,21 +710,27 @@ body.power-wall-active {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 52px;
-  height: 52px;
+  width: 48px;
+  height: 48px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   border: none;
   border-radius: 50%;
-  color: #fff;
-  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.75rem;
   cursor: pointer;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
 }
 
 .power-wall-lightbox-prev:hover,
 .power-wall-lightbox-next:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
 }
 
 .power-wall-lightbox-prev {

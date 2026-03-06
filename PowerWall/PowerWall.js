@@ -263,13 +263,18 @@
         <div class="power-wall-lightbox-backdrop"></div>
         <div class="power-wall-lightbox-header">
           <span class="power-wall-lightbox-counter"></span>
-          <button type="button" class="power-wall-lightbox-close" title="关闭 (Esc)">&times;</button>
+          <div class="power-wall-lightbox-toolbar">
+            <button type="button" class="power-wall-lightbox-btn" data-action="zoom-out" title="缩小">−</button>
+            <button type="button" class="power-wall-lightbox-btn" data-action="zoom-in" title="放大">+</button>
+            <button type="button" class="power-wall-lightbox-btn" data-action="toggle-1to1" title="1:1 原图">1:1</button>
+          </div>
+          <button type="button" class="power-wall-lightbox-close" title="关闭 (Esc)">×</button>
         </div>
-        <button type="button" class="power-wall-lightbox-prev" title="上一张">&#9664;</button>
+        <button type="button" class="power-wall-lightbox-prev" title="上一张">‹</button>
         <div class="power-wall-lightbox-content">
           <img class="power-wall-lightbox-img" alt="" draggable="false">
         </div>
-        <button type="button" class="power-wall-lightbox-next" title="下一张">&#9654;</button>
+        <button type="button" class="power-wall-lightbox-next" title="下一张">›</button>
         <div class="power-wall-lightbox-footer">
           <a class="power-wall-lightbox-detail" href="#" target="_blank">查看详情</a>
         </div>
@@ -291,6 +296,17 @@
       overlay.querySelector('.power-wall-lightbox-close').addEventListener('click', () => overlay.dispatchEvent(new CustomEvent('lightbox:close')));
       overlay.querySelector('.power-wall-lightbox-prev').addEventListener('click', (e) => { e.stopPropagation(); overlay.dispatchEvent(new CustomEvent('lightbox:prev')); });
       overlay.querySelector('.power-wall-lightbox-next').addEventListener('click', (e) => { e.stopPropagation(); overlay.dispatchEvent(new CustomEvent('lightbox:next')); });
+      overlay.querySelectorAll('.power-wall-lightbox-btn[data-action]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          overlay.dispatchEvent(new CustomEvent('lightbox:toolbar', { detail: { action: btn.dataset.action } }));
+        });
+      });
+      content.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        overlay.dispatchEvent(new CustomEvent('lightbox:toolbar', { detail: { action: 'toggle-1to1' } }));
+      });
       content.addEventListener('wheel', (e) => {
         e.preventDefault();
         const s = overlay._lbState;
@@ -314,6 +330,44 @@
         if (s.isDragging) { s.translateX += e.clientX - s.lastX; s.translateY += e.clientY - s.lastY; s.lastX = e.clientX; s.lastY = e.clientY; scheduleApply(); }
       };
       overlay._lbMouseUp = () => { if (overlay._lbState) overlay._lbState.isDragging = false; };
+      overlay.addEventListener('lightbox:toolbar', (e) => {
+        const action = e.detail?.action;
+        const s = overlay._lbState;
+        const content = overlay.querySelector('.power-wall-lightbox-content');
+        const img = overlay.querySelector('.power-wall-lightbox-img');
+        if (!s || !content || !img) return;
+        const rect = content.getBoundingClientRect();
+        if (action === 'zoom-in') {
+          const newScale = Math.min(10, s.scale * 1.25);
+          if (newScale !== s.scale) {
+            s.translateX *= newScale / s.scale;
+            s.translateY *= newScale / s.scale;
+            s.scale = newScale;
+            overlay._lbRaf = null;
+            overlay._lbRaf = requestAnimationFrame(applyTransform);
+          }
+        } else if (action === 'zoom-out') {
+          const newScale = Math.max(0.2, s.scale * 0.8);
+          if (newScale !== s.scale) {
+            s.translateX = s.translateX * (newScale / s.scale);
+            s.translateY = s.translateY * (newScale / s.scale);
+            s.scale = newScale;
+            overlay._lbRaf = null;
+            overlay._lbRaf = requestAnimationFrame(applyTransform);
+          }
+        } else if (action === 'toggle-1to1') {
+          const nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
+          const cw = rect.width, ch = rect.height;
+          const fitScale = (nw && nh && cw && ch) ? Math.min(cw / nw, ch / nh) : 1;
+          const targetScale = Math.abs(s.scale - 1) < 0.05 ? (1 / Math.max(0.01, fitScale)) : 1;
+          const newScale = Math.max(0.2, Math.min(10, targetScale));
+          s.translateX = s.translateX * (newScale / s.scale);
+          s.translateY = s.translateY * (newScale / s.scale);
+          s.scale = newScale;
+          overlay._lbRaf = null;
+          overlay._lbRaf = requestAnimationFrame(applyTransform);
+        }
+      });
     }
     if (!overlay._lbState) overlay._lbState = { scale: 1, translateX: 0, translateY: 0 };
     overlay._lbIds = ids;
@@ -330,8 +384,15 @@
       const detailLink = overlay.querySelector('.power-wall-lightbox-detail');
       const s = overlay._lbState || {};
       s.scale = 1; s.translateX = 0; s.translateY = 0;
-      if (img) img.src = getImageUrl(id);
-      if (img) img.style.transform = 'translate(0,0) scale(1)';
+      if (img) {
+        img.style.opacity = '0';
+        img.style.transition = 'opacity 0.15s ease';
+        const showImg = () => { img.style.opacity = '1'; };
+        img.onload = showImg;
+        img.src = getImageUrl(id);
+        if (img.complete && img.naturalWidth) showImg();
+        img.style.transform = 'translate(0,0) scale(1)';
+      }
       if (counter) counter.textContent = `${idx + 1} / ${total}`;
       if (detailLink) detailLink.href = `/images/${id}`;
     };
