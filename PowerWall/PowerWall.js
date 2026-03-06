@@ -251,9 +251,10 @@
   }
 
   // ==================== 内置 Lightbox ====================
-  function openBuiltinLightbox(ids, index, type) {
+  function openBuiltinLightbox(ids, index, type, itemsData) {
     if (!ids?.length || index < 0 || type !== 'images') return;
     const getImageUrl = (id) => `/image/${id}/image`;
+    const getThumbUrl = (d) => (d?.paths?.thumbnail || d?.paths?.preview || (d?.id ? getImageUrl(d.id) : ''));
     let overlay = document.getElementById('power-wall-lightbox-overlay');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -272,15 +273,17 @@
         </div>
         <button type="button" class="power-wall-lightbox-prev" title="上一张">‹</button>
         <div class="power-wall-lightbox-content">
+          <div class="power-wall-lightbox-loading"></div>
           <img class="power-wall-lightbox-img" alt="" draggable="false">
         </div>
         <button type="button" class="power-wall-lightbox-next" title="下一张">›</button>
+        <div class="power-wall-lightbox-thumbs"></div>
         <div class="power-wall-lightbox-footer">
           <a class="power-wall-lightbox-detail" href="#" target="_blank">查看详情</a>
         </div>
       `;
       document.body.appendChild(overlay);
-      overlay._lbState = { scale: 1, translateX: 0, translateY: 0, lastX: 0, lastY: 0, isDragging: false };
+      overlay._lbState = { scale: 1, translateX: 0, translateY: 0, lastX: 0, lastY: 0, isDragging: false, startY: 0 };
       overlay._lbRaf = null;
       const imgEl = overlay.querySelector('.power-wall-lightbox-img');
       const content = overlay.querySelector('.power-wall-lightbox-content');
@@ -322,14 +325,51 @@
         s.scale = newScale;
         scheduleApply();
       }, { passive: false });
+      const startDrag = (clientX, clientY) => {
+        overlay._lbState.isDragging = true;
+        overlay._lbState.lastX = clientX;
+        overlay._lbState.lastY = clientY;
+        overlay._lbState.startY = clientY;
+      };
       content.addEventListener('mousedown', (e) => {
-        if (e.button === 0) { overlay._lbState.isDragging = true; overlay._lbState.lastX = e.clientX; overlay._lbState.lastY = e.clientY; }
+        if (e.button === 0) startDrag(e.clientX, e.clientY);
       });
+      content.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+      const getClientCoords = (e) => (e.touches?.[0] ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: e.clientX, y: e.clientY });
       overlay._lbMouseMove = (e) => {
         const s = overlay._lbState;
-        if (s.isDragging) { s.translateX += e.clientX - s.lastX; s.translateY += e.clientY - s.lastY; s.lastX = e.clientX; s.lastY = e.clientY; scheduleApply(); }
+        if (!s.isDragging) return;
+        const { x: cx, y: cy } = getClientCoords(e);
+        if (Math.abs(s.scale - 1) < 0.05) {
+          const dragDown = cy - s.startY;
+          if (dragDown > 100) {
+            overlay._lbState.isDragging = false;
+            overlay.dispatchEvent(new CustomEvent('lightbox:close'));
+            return;
+          }
+          s.translateY = Math.max(0, dragDown);
+          scheduleApply();
+        } else {
+          s.translateX += cx - s.lastX;
+          s.translateY += cy - s.lastY;
+          s.lastX = cx;
+          s.lastY = cy;
+          scheduleApply();
+        }
       };
-      overlay._lbMouseUp = () => { if (overlay._lbState) overlay._lbState.isDragging = false; };
+      overlay._lbMouseUp = () => {
+        if (!overlay._lbState) return;
+        const s = overlay._lbState;
+        if (Math.abs(s.scale - 1) < 0.05 && s.translateY > 0) {
+          const dragDown = s.translateY;
+          s.translateY = 0;
+          scheduleApply();
+          if (dragDown > 60) overlay.dispatchEvent(new CustomEvent('lightbox:close'));
+        }
+        s.isDragging = false;
+      };
       overlay.addEventListener('lightbox:toolbar', (e) => {
         const action = e.detail?.action;
         const s = overlay._lbState;
@@ -369,8 +409,9 @@
         }
       });
     }
-    if (!overlay._lbState) overlay._lbState = { scale: 1, translateX: 0, translateY: 0 };
+    if (!overlay._lbState) overlay._lbState = { scale: 1, translateX: 0, translateY: 0, lastX: 0, lastY: 0, isDragging: false, startY: 0 };
     overlay._lbIds = ids;
+    overlay._lbItemsData = itemsData || null;
     overlay._lbIndex = index;
     overlay._lbTotal = ids.length;
     const updateContent = () => {
@@ -380,21 +421,53 @@
       const id = overlay._lbIds?.[idx];
       if (!id) return;
       const img = overlay.querySelector('.power-wall-lightbox-img');
+      const loadingEl = overlay.querySelector('.power-wall-lightbox-loading');
       const counter = overlay.querySelector('.power-wall-lightbox-counter');
       const detailLink = overlay.querySelector('.power-wall-lightbox-detail');
+      const thumbsEl = overlay.querySelector('.power-wall-lightbox-thumbs');
       const s = overlay._lbState || {};
       s.scale = 1; s.translateX = 0; s.translateY = 0;
       if (img) {
+        if (loadingEl) loadingEl.classList.add('power-wall-lightbox-loading-active');
         img.style.opacity = '0';
         img.style.transition = 'opacity 0.15s ease';
-        const showImg = () => { img.style.opacity = '1'; };
+        const showImg = () => {
+          img.style.opacity = '1';
+          if (loadingEl) loadingEl.classList.remove('power-wall-lightbox-loading-active');
+        };
         img.onload = showImg;
+        img.onerror = showImg;
         img.src = getImageUrl(id);
         if (img.complete && img.naturalWidth) showImg();
         img.style.transform = 'translate(0,0) scale(1)';
       }
       if (counter) counter.textContent = `${idx + 1} / ${total}`;
       if (detailLink) detailLink.href = `/images/${id}`;
+      if (thumbsEl && overlay._lbItemsData && total >= 2) {
+        overlay.classList.add('power-wall-lightbox-has-thumbs');
+        thumbsEl.innerHTML = Array.from({ length: total }, (_, i) => {
+          const d = overlay._lbItemsData[i] || { id: overlay._lbIds?.[i] };
+          const src = getThumbUrl(d) || getImageUrl(overlay._lbIds?.[i]);
+          return `<button type="button" class="power-wall-lightbox-thumb ${i === idx ? 'is-selected' : ''}" data-index="${i}" title="${i + 1}"><img src="${src}" alt=""></button>`;
+        }).join('');
+        thumbsEl.classList.add('power-wall-lightbox-thumbs-visible');
+        thumbsEl.querySelectorAll('.power-wall-lightbox-thumb').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const i = parseInt(btn.dataset.index, 10);
+            if (!isNaN(i) && i >= 0 && i < total && i !== overlay._lbIndex) {
+              overlay._lbIndex = i;
+              updateContent();
+            }
+          });
+        });
+        const selectedThumb = thumbsEl.querySelector('.power-wall-lightbox-thumb.is-selected');
+        if (selectedThumb) selectedThumb.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+      } else if (thumbsEl) {
+        thumbsEl.innerHTML = '';
+        thumbsEl.classList.remove('power-wall-lightbox-thumbs-visible');
+        overlay.classList.remove('power-wall-lightbox-has-thumbs');
+      }
     };
     const keyHandler = (e) => {
       if (!overlay.classList.contains('power-wall-lightbox-visible')) {
@@ -411,8 +484,14 @@
         overlay.classList.remove('power-wall-lightbox-visible');
         document.body.classList.remove('power-wall-lightbox-open');
         if (overlay._lbKeyHandler) document.removeEventListener('keydown', overlay._lbKeyHandler, true);
-        if (overlay._lbMouseMove) document.removeEventListener('mousemove', overlay._lbMouseMove);
-        if (overlay._lbMouseUp) document.removeEventListener('mouseup', overlay._lbMouseUp);
+        if (overlay._lbMouseMove) {
+          document.removeEventListener('mousemove', overlay._lbMouseMove);
+          document.removeEventListener('touchmove', overlay._lbMouseMove);
+        }
+        if (overlay._lbMouseUp) {
+          document.removeEventListener('mouseup', overlay._lbMouseUp);
+          document.removeEventListener('touchend', overlay._lbMouseUp);
+        }
         document.body.style.overflow = '';
         if (overlay._lbAddedPadding) {
           document.documentElement.style.paddingRight = '';
@@ -432,6 +511,8 @@
     updateContent();
     document.addEventListener('mousemove', overlay._lbMouseMove);
     document.addEventListener('mouseup', overlay._lbMouseUp);
+    document.addEventListener('touchmove', overlay._lbMouseMove, { passive: true });
+    document.addEventListener('touchend', overlay._lbMouseUp);
     const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
     overlay._scrollbarWidth = scrollbarWidth;
     overlay._lbAddedPadding = false;
@@ -790,8 +871,12 @@
       const ids = this.items.map((it) => String(it.data?.id)).filter(Boolean);
       const index = ids.indexOf(id);
       if (index < 0) return;
-      if (type === 'images') openBuiltinLightbox(ids, index, type);
-      else window.location.href = `/${type}/${id}`;
+      if (type === 'images') {
+        const itemsData = this.items.map((it) => it.data).filter(Boolean);
+        openBuiltinLightbox(ids, index, type, itemsData);
+      } else {
+        window.location.href = `/${type}/${id}`;
+      }
     }
 
     createContainer(pluginMount) {
