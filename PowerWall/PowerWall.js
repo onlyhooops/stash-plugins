@@ -1,6 +1,6 @@
 /**
  * PowerWall — Stash 原生风格砌墙视图插件
- * @version 1.4.3
+ * @version 1.5.0
  *
  * 砌墙布局：边距(margin)、行距(rowGap)、列距(columnGap)，按行排列、统一行高，
  * 替代自适应瀑布流。支持 /images、/scenes 列表，无限滚动、内置 lightbox、筛选与设置。
