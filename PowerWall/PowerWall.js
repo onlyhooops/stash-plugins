@@ -251,10 +251,9 @@
   }
 
   // ==================== 内置 Lightbox ====================
-  function openBuiltinLightbox(ids, index, type, itemsData) {
+  function openBuiltinLightbox(ids, index, type) {
     if (!ids?.length || index < 0 || type !== 'images') return;
     const getImageUrl = (id) => `/image/${id}/image`;
-    const getThumbUrl = (d) => (d?.paths?.thumbnail || d?.paths?.preview || (d?.id ? getImageUrl(d.id) : ''));
     let overlay = document.getElementById('power-wall-lightbox-overlay');
     if (!overlay) {
       overlay = document.createElement('div');
@@ -264,12 +263,12 @@
         <div class="power-wall-lightbox-backdrop"></div>
         <div class="power-wall-lightbox-header">
           <span class="power-wall-lightbox-counter"></span>
-          <div class="power-wall-lightbox-toolbar">
-            <button type="button" class="power-wall-lightbox-btn" data-action="zoom-out" title="缩小">−</button>
-            <button type="button" class="power-wall-lightbox-btn" data-action="zoom-in" title="放大">+</button>
-            <button type="button" class="power-wall-lightbox-btn" data-action="toggle-1to1" title="1:1 原图">1:1</button>
-          </div>
           <button type="button" class="power-wall-lightbox-close" title="关闭 (Esc)">×</button>
+        </div>
+        <div class="power-wall-lightbox-toolbar">
+          <button type="button" class="power-wall-lightbox-btn" data-action="zoom-out" title="缩小">−</button>
+          <button type="button" class="power-wall-lightbox-btn" data-action="zoom-in" title="放大">+</button>
+          <button type="button" class="power-wall-lightbox-btn" data-action="toggle-1to1" title="1:1 原图">1:1</button>
         </div>
         <button type="button" class="power-wall-lightbox-prev" title="上一张">‹</button>
         <div class="power-wall-lightbox-content">
@@ -277,7 +276,6 @@
           <img class="power-wall-lightbox-img" alt="" draggable="false">
         </div>
         <button type="button" class="power-wall-lightbox-next" title="下一张">›</button>
-        <div class="power-wall-lightbox-thumbs"></div>
         <div class="power-wall-lightbox-footer">
           <a class="power-wall-lightbox-detail" href="#" target="_blank">查看详情</a>
         </div>
@@ -411,7 +409,6 @@
     }
     if (!overlay._lbState) overlay._lbState = { scale: 1, translateX: 0, translateY: 0, lastX: 0, lastY: 0, isDragging: false, startY: 0 };
     overlay._lbIds = ids;
-    overlay._lbItemsData = itemsData || null;
     overlay._lbIndex = index;
     overlay._lbTotal = ids.length;
     const updateContent = () => {
@@ -424,15 +421,15 @@
       const loadingEl = overlay.querySelector('.power-wall-lightbox-loading');
       const counter = overlay.querySelector('.power-wall-lightbox-counter');
       const detailLink = overlay.querySelector('.power-wall-lightbox-detail');
-      const thumbsEl = overlay.querySelector('.power-wall-lightbox-thumbs');
       const s = overlay._lbState || {};
       s.scale = 1; s.translateX = 0; s.translateY = 0;
       if (img) {
-        if (loadingEl) loadingEl.classList.add('power-wall-lightbox-loading-active');
         img.style.opacity = '0';
-        img.style.transition = 'opacity 0.15s ease';
+        img.style.transition = 'none';
+        if (loadingEl) loadingEl.classList.add('power-wall-lightbox-loading-active');
         const showImg = () => {
           img.style.opacity = '1';
+          img.style.transition = 'none';
           if (loadingEl) loadingEl.classList.remove('power-wall-lightbox-loading-active');
         };
         img.onload = showImg;
@@ -443,31 +440,6 @@
       }
       if (counter) counter.textContent = `${idx + 1} / ${total}`;
       if (detailLink) detailLink.href = `/images/${id}`;
-      if (thumbsEl && overlay._lbItemsData && total >= 2) {
-        overlay.classList.add('power-wall-lightbox-has-thumbs');
-        thumbsEl.innerHTML = Array.from({ length: total }, (_, i) => {
-          const d = overlay._lbItemsData[i] || { id: overlay._lbIds?.[i] };
-          const src = getThumbUrl(d) || getImageUrl(overlay._lbIds?.[i]);
-          return `<button type="button" class="power-wall-lightbox-thumb ${i === idx ? 'is-selected' : ''}" data-index="${i}" title="${i + 1}"><img src="${src}" alt=""></button>`;
-        }).join('');
-        thumbsEl.classList.add('power-wall-lightbox-thumbs-visible');
-        thumbsEl.querySelectorAll('.power-wall-lightbox-thumb').forEach((btn) => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const i = parseInt(btn.dataset.index, 10);
-            if (!isNaN(i) && i >= 0 && i < total && i !== overlay._lbIndex) {
-              overlay._lbIndex = i;
-              updateContent();
-            }
-          });
-        });
-        const selectedThumb = thumbsEl.querySelector('.power-wall-lightbox-thumb.is-selected');
-        if (selectedThumb) selectedThumb.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-      } else if (thumbsEl) {
-        thumbsEl.innerHTML = '';
-        thumbsEl.classList.remove('power-wall-lightbox-thumbs-visible');
-        overlay.classList.remove('power-wall-lightbox-has-thumbs');
-      }
     };
     const keyHandler = (e) => {
       if (!overlay.classList.contains('power-wall-lightbox-visible')) {
@@ -871,10 +843,8 @@
       const ids = this.items.map((it) => String(it.data?.id)).filter(Boolean);
       const index = ids.indexOf(id);
       if (index < 0) return;
-      if (type === 'images') {
-        const itemsData = this.items.map((it) => it.data).filter(Boolean);
-        openBuiltinLightbox(ids, index, type, itemsData);
-      } else {
+      if (type === 'images') openBuiltinLightbox(ids, index, type);
+      else {
         window.location.href = `/${type}/${id}`;
       }
     }
@@ -1455,6 +1425,13 @@
   function init() {
     const pageType = getPageType();
     if (!pageType) return;
+    if (pageType === 'images') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('galleries') || params.has('gallery_ids')) {
+        window.location.replace(window.location.pathname);
+        return;
+      }
+    }
     if (powerWall) powerWall.disable();
     powerWall = new PowerWall();
     powerWall.init();
