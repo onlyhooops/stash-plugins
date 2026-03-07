@@ -1,6 +1,6 @@
 /**
  * PowerWall — Stash 原生风格砌墙视图插件
- * @version 1.5.0
+ * @version 1.6.0
  *
  * 砌墙布局：边距(margin)、行距(rowGap)、列距(columnGap)，按行排列、统一行高，
  * 替代自适应瀑布流。支持 /images、/scenes 列表，无限滚动、内置 lightbox、筛选与设置。
@@ -251,7 +251,29 @@
   }
 
   // ==================== 内置 Lightbox ====================
-  function openBuiltinLightbox(ids, index, type) {
+  function setInfobarContent(infobarEl, imgName, idx, total, galleryStr, galleryId) {
+    const line1 = infobarEl?.querySelector('.power-wall-lightbox-infobar-line1');
+    const line2 = infobarEl?.querySelector('.power-wall-lightbox-infobar-line2');
+    if (!line1 || !line2) return;
+    const counter = `${idx + 1}/${total}`;
+    line1.textContent = imgName ? `${imgName} ${counter}` : counter;
+    if (galleryStr && galleryId) {
+      const a = document.createElement('a');
+      a.href = `/galleries/${galleryId}`;
+      a.className = 'power-wall-lightbox-gallery-link';
+      a.textContent = galleryStr;
+      a.target = '_self';
+      line2.innerHTML = '';
+      line2.appendChild(a);
+      line2.style.display = '';
+    } else {
+      line2.innerHTML = '';
+      line2.style.display = galleryStr ? '' : 'none';
+      if (galleryStr) line2.textContent = galleryStr;
+    }
+  }
+
+  function openBuiltinLightbox(ids, index, type, itemsData) {
     if (!ids?.length || index < 0 || type !== 'images') return;
     const getImageUrl = (id) => `/image/${id}/image`;
     let overlay = document.getElementById('power-wall-lightbox-overlay');
@@ -262,7 +284,10 @@
       overlay.innerHTML = `
         <div class="power-wall-lightbox-backdrop"></div>
         <div class="power-wall-lightbox-header">
-          <span class="power-wall-lightbox-counter"></span>
+          <div class="power-wall-lightbox-infobar">
+            <div class="power-wall-lightbox-infobar-line1"></div>
+            <div class="power-wall-lightbox-infobar-line2"></div>
+          </div>
           <button type="button" class="power-wall-lightbox-close" title="关闭 (Esc)">×</button>
         </div>
         <div class="power-wall-lightbox-toolbar">
@@ -283,12 +308,31 @@
       document.body.appendChild(overlay);
       overlay._lbState = { scale: 1, translateX: 0, translateY: 0, lastX: 0, lastY: 0, isDragging: false, startY: 0 };
       overlay._lbRaf = null;
+      overlay._lbWheelAccum = 0;
+      overlay._lbWheelPivot = null;
       const imgEl = overlay.querySelector('.power-wall-lightbox-img');
       const content = overlay.querySelector('.power-wall-lightbox-content');
       const applyTransform = () => {
         overlay._lbRaf = null;
         const s = overlay._lbState;
-        imgEl.style.transform = `translate(${s.translateX}px, ${s.translateY}px) scale(${s.scale})`;
+        const accum = overlay._lbWheelAccum;
+        const pivot = overlay._lbWheelPivot;
+        if (accum !== 0 && pivot && content) {
+          const delta = Math.max(-200, Math.min(200, overlay._lbWheelAccum));
+          overlay._lbWheelAccum = 0;
+          overlay._lbWheelPivot = null;
+          const factor = 1 - delta * 0.002;
+          const newScale = Math.max(0.2, Math.min(10, s.scale * factor));
+          if (newScale !== s.scale) {
+            const rect = content.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+            const mx = pivot.x - cx, my = pivot.y - cy;
+            s.translateX = mx * (1 - newScale / s.scale) + s.translateX * (newScale / s.scale);
+            s.translateY = my * (1 - newScale / s.scale) + s.translateY * (newScale / s.scale);
+            s.scale = newScale;
+          }
+        }
+        imgEl.style.transform = `translate3d(${s.translateX}px, ${s.translateY}px, 0) scale(${s.scale})`;
       };
       const scheduleApply = () => {
         if (!overlay._lbRaf) overlay._lbRaf = requestAnimationFrame(applyTransform);
@@ -310,17 +354,9 @@
       });
       content.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const s = overlay._lbState;
         const delta = e.deltaMode === 1 ? e.deltaY * 16 : (e.deltaMode === 2 ? e.deltaY * 100 : e.deltaY);
-        const factor = 1 - delta * 0.002;
-        const newScale = Math.max(0.2, Math.min(10, s.scale * factor));
-        if (newScale === s.scale) return;
-        const rect = content.getBoundingClientRect();
-        const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-        const mx = e.clientX - cx, my = e.clientY - cy;
-        s.translateX = mx * (1 - newScale / s.scale) + s.translateX * (newScale / s.scale);
-        s.translateY = my * (1 - newScale / s.scale) + s.translateY * (newScale / s.scale);
-        s.scale = newScale;
+        overlay._lbWheelAccum += delta;
+        overlay._lbWheelPivot = { x: e.clientX, y: e.clientY };
         scheduleApply();
       }, { passive: false });
       const startDrag = (clientX, clientY) => {
@@ -409,8 +445,35 @@
     }
     if (!overlay._lbState) overlay._lbState = { scale: 1, translateX: 0, translateY: 0, lastX: 0, lastY: 0, isDragging: false, startY: 0 };
     overlay._lbIds = ids;
+    overlay._lbItemsData = itemsData || null;
     overlay._lbIndex = index;
     overlay._lbTotal = ids.length;
+    overlay._lbGalleryNameFromUrl = null;
+    overlay._lbGalleryNameCache = overlay._lbGalleryNameCache || {};
+    const galleryIds = parseIdList(new URLSearchParams(window.location.search).get('galleries') || new URLSearchParams(window.location.search).get('gallery_ids') || '');
+    if (galleryIds.length === 1) {
+      const gid0 = galleryIds[0];
+      graphqlRequest('query($id: ID!) { findGallery(id: $id) { title folder { path } } }', { id: String(gid0) }).then((res) => {
+        const g = res?.findGallery;
+        const name = g?.title || (g?.folder?.path ? g.folder.path.replace(/^.*[/\\]/, '') : '');
+        if (!overlay.isConnected || !name) return;
+        overlay._lbGalleryNameFromUrl = name;
+        if (!overlay._lbGalleryNameCache) overlay._lbGalleryNameCache = {};
+        overlay._lbGalleryNameCache[gid0] = name;
+        const infobarEl = overlay.querySelector('.power-wall-lightbox-infobar');
+        const itemData = overlay._lbItemsData?.[overlay._lbIndex];
+        const getImageName = (d) => {
+          if (d?.title) return d.title;
+          const vf = d?.visual_files?.[0];
+          if (vf?.path) return vf.path.replace(/^.*[/\\]/, '');
+          return d?.id ? `#${d.id}` : '';
+        };
+        const imgName = itemData ? getImageName(itemData) : '';
+        const idx = overlay._lbIndex;
+        const total = overlay._lbTotal;
+        if (infobarEl) setInfobarContent(infobarEl, imgName, idx, total, name, gid0);
+      }).catch(() => {});
+    }
     const updateContent = () => {
       if (!overlay.isConnected) return;
       const idx = overlay._lbIndex;
@@ -419,7 +482,7 @@
       if (!id) return;
       const img = overlay.querySelector('.power-wall-lightbox-img');
       const loadingEl = overlay.querySelector('.power-wall-lightbox-loading');
-      const counter = overlay.querySelector('.power-wall-lightbox-counter');
+      const infobarEl = overlay.querySelector('.power-wall-lightbox-infobar');
       const detailLink = overlay.querySelector('.power-wall-lightbox-detail');
       const s = overlay._lbState || {};
       s.scale = 1; s.translateX = 0; s.translateY = 0;
@@ -436,9 +499,59 @@
         img.onerror = showImg;
         img.src = getImageUrl(id);
         if (img.complete && img.naturalWidth) showImg();
-        img.style.transform = 'translate(0,0) scale(1)';
+        img.style.transform = 'translate3d(0,0,0) scale(1)';
       }
-      if (counter) counter.textContent = `${idx + 1} / ${total}`;
+      if (infobarEl) {
+        const itemData = overlay._lbItemsData?.[idx];
+        const getGalleryName = (g) => {
+          if (g?.title) return g.title;
+          const p = g?.folder?.path;
+          return p ? p.replace(/^.*[/\\]/, '') : '';
+        };
+        const galleryNames = itemData?.galleries?.map(getGalleryName).filter(Boolean) || [];
+        let galleryStr = galleryNames.length ? galleryNames.join(' · ') : '';
+        if (!galleryStr && overlay._lbGalleryNameFromUrl) galleryStr = overlay._lbGalleryNameFromUrl;
+        if (!galleryStr && itemData?.galleries?.[0]?.id) {
+          const gid = itemData.galleries[0].id;
+          const cached = overlay._lbGalleryNameCache?.[gid];
+          if (cached) galleryStr = cached;
+        }
+        if (!galleryStr && itemData?.galleries?.[0]?.id) {
+          const gid = itemData.galleries[0].id;
+          const fetchIdx = idx;
+          graphqlRequest('query($id: ID!) { findGallery(id: $id) { title folder { path } } }', { id: String(gid) }).then((res) => {
+            const g = res?.findGallery;
+            const name = g?.title || (g?.folder?.path ? g.folder.path.replace(/^.*[/\\]/, '') : '');
+            if (name) {
+              if (!overlay._lbGalleryNameCache) overlay._lbGalleryNameCache = {};
+              overlay._lbGalleryNameCache[gid] = name;
+            }
+            if (name && overlay.isConnected && overlay._lbIndex === fetchIdx) {
+              overlay._lbGalleryNameFromUrl = name;
+              const inf = overlay.querySelector('.power-wall-lightbox-infobar');
+              const idat = overlay._lbItemsData?.[overlay._lbIndex];
+              const getName = (d) => d?.title || (d?.visual_files?.[0]?.path ? d.visual_files[0].path.replace(/^.*[/\\]/, '') : (d?.id ? `#${d.id}` : ''));
+              const iname = idat ? getName(idat) : '';
+              const i = overlay._lbIndex;
+              const t = overlay._lbTotal;
+              if (inf) setInfobarContent(inf, iname, i, t, name, gid);
+            }
+          }).catch(() => {});
+        }
+        const getImageName = (d) => {
+          if (d?.title) return d.title;
+          const vf = d?.visual_files?.[0];
+          if (vf?.path) return vf.path.replace(/^.*[/\\]/, '');
+          return d?.id ? `#${d.id}` : '';
+        };
+        const imgName = itemData ? getImageName(itemData) : '';
+        let galleryId = itemData?.galleries?.[0]?.id;
+        if (!galleryId && galleryStr && overlay._lbGalleryNameFromUrl === galleryStr) {
+          const urlGids = parseIdList(new URLSearchParams(window.location.search).get('galleries') || new URLSearchParams(window.location.search).get('gallery_ids') || '');
+          if (urlGids.length === 1) galleryId = urlGids[0];
+        }
+        setInfobarContent(infobarEl, imgName, idx, total, galleryStr || null, galleryId);
+      }
       if (detailLink) detailLink.href = `/images/${id}`;
     };
     const keyHandler = (e) => {
@@ -748,9 +861,9 @@
       if (!this.isEnabled || !this.wallContainer || !this.scroller) return;
       this.scroller.start(this.wallContainer);
       this.resizeHandler = debounce(() => {
-        if (!this.isEnabled || !this.brickWall) return;
+        if (!this.isEnabled || !this.brickWall || !this.wallContainer?.isConnected) return;
         requestAnimationFrame(() => {
-          if (this.isEnabled && this.brickWall) this.brickWall.relayout();
+          if (this.isEnabled && this.brickWall && this.wallContainer?.isConnected) this.brickWall.relayout();
         });
       }, 150);
       window.addEventListener('resize', this.resizeHandler);
@@ -765,13 +878,13 @@
       }
       this._lastScrollbarW = getScrollbarWidth();
       this._viewportCheck = setInterval(() => {
-        if (!this.isEnabled || !this.brickWall) return;
+        if (!this.isEnabled || !this.brickWall || !this.wallContainer?.isConnected) return;
         const now = getScrollbarWidth();
         if (now !== this._lastScrollbarW) {
           this._lastScrollbarW = now;
           this.resizeHandler();
         }
-      }, 200);
+      }, 500);
       this.createBackToTopButton();
     }
 
@@ -843,8 +956,10 @@
       const ids = this.items.map((it) => String(it.data?.id)).filter(Boolean);
       const index = ids.indexOf(id);
       if (index < 0) return;
-      if (type === 'images') openBuiltinLightbox(ids, index, type);
-      else {
+      if (type === 'images') {
+        const itemsData = this.items.map((it) => it.data).filter(Boolean);
+        openBuiltinLightbox(ids, index, type, itemsData);
+      } else {
         window.location.href = `/${type}/${id}`;
       }
     }
@@ -963,8 +1078,8 @@
             images {
               id title rating100 o_counter
               paths { thumbnail preview image }
-              visual_files { ... on ImageFile { width height } }
-              tags { id name } galleries { id title }
+              visual_files { ... on ImageFile { width height path } }
+              tags { id name } galleries { id title folder { path } }
             }
           }
         }`;
@@ -1460,8 +1575,16 @@
     if (!api?.Event) return false;
     api.Event.addEventListener('stash:location', (e) => {
       const path = e.detail?.data?.location?.pathname || window.location.pathname;
+      document.body.classList.add('power-wall-transitioning');
       unmountPowerWall();
-      if (!isExcludedPath(path) && isListPath(path)) setTimeout(init, 300);
+      if (!isExcludedPath(path) && isListPath(path)) {
+        setTimeout(() => {
+          init();
+          requestAnimationFrame(() => document.body.classList.remove('power-wall-transitioning'));
+        }, 300);
+      } else {
+        requestAnimationFrame(() => document.body.classList.remove('power-wall-transitioning'));
+      }
     });
     return true;
   }
@@ -1472,8 +1595,18 @@
       if (location.href === lastUrl) return;
       lastUrl = location.href;
       if (initTimeout) clearTimeout(initTimeout);
+      document.body.classList.add('power-wall-transitioning');
       unmountPowerWall();
-      initTimeout = setTimeout(() => { initTimeout = null; init(); }, 300);
+      const path = window.location.pathname;
+      if (!isExcludedPath(path) && isListPath(path)) {
+        initTimeout = setTimeout(() => {
+          initTimeout = null;
+          init();
+          requestAnimationFrame(() => document.body.classList.remove('power-wall-transitioning'));
+        }, 300);
+      } else {
+        document.body.classList.remove('power-wall-transitioning');
+      }
     };
     window.addEventListener('popstate', checkUrl);
     const origPush = history.pushState;

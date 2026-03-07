@@ -312,6 +312,10 @@ body.power-wall-active {
   scrollbar-gutter: stable;
 }
 
+body.power-wall-transitioning {
+  cursor: default !important;
+}
+
 /* lightbox 打开时禁止选择底层内容，避免双击误选砌墙照片/文本 */
 body.power-wall-lightbox-open {
   user-select: none;
@@ -672,10 +676,41 @@ body.power-wall-lightbox-open {
   gap: 0.75rem;
 }
 
-.power-wall-lightbox-counter {
+.power-wall-lightbox-infobar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
   font-size: 0.9rem;
   color: rgba(255, 255, 255, 0.9);
   font-variant-numeric: tabular-nums;
+  max-width: 60%;
+  overflow: hidden;
+}
+
+.power-wall-lightbox-infobar-line1 {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.power-wall-lightbox-infobar-line2 {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.power-wall-lightbox-gallery-link {
+  color: var(--primary, #137cbd);
+  text-decoration: none;
+  padding: 0.15rem 0.4rem;
+  margin: -0.15rem -0.4rem;
+  border-radius: 4px;
+  background: rgba(19, 124, 189, 0.15);
+  transition: background 0.15s, color 0.15s;
+}
+
+.power-wall-lightbox-gallery-link:hover {
+  background: rgba(19, 124, 189, 0.25);
+  color: #5eb3f6;
 }
 
 .power-wall-lightbox-toolbar {
@@ -728,7 +763,7 @@ body.power-wall-lightbox-open {
   padding: 0;
   background: rgba(255, 255, 255, 0.08);
   border: none;
-  border-radius: 50%;
+  border-radius: 10px;
   color: rgba(255, 255, 255, 0.9);
   font-size: 1.75rem;
   cursor: pointer;
@@ -763,6 +798,7 @@ body.power-wall-lightbox-open {
   overflow: hidden;
   cursor: grab;
   z-index: 1;
+  contain: content;
 }
 
 .power-wall-lightbox-content:active {
@@ -805,6 +841,7 @@ body.power-wall-lightbox-open {
   pointer-events: none;
   will-change: transform;
   transform-origin: center center;
+  backface-visibility: hidden;
 }
 
 .power-wall-lightbox-footer {
@@ -813,7 +850,11 @@ body.power-wall-lightbox-open {
   left: 0;
   right: 0;
   padding: 0.75rem 1rem;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
   z-index: 2;
 }
 
