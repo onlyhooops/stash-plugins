@@ -6,7 +6,7 @@
 
 | 插件 | 说明 |
 |------|------|
-| **FavoriteHeart** | 红心/心碎收藏，like/dislike 互斥；带 dislike 的照片/视频去色显示 |
+| **FavoriteHeart** | 红心/心碎收藏，like/dislike 互斥 |
 | **PowerWall** | 砌墙视图（Stash 原生风格）— 边距/行距/列距可调、无限滚动、内置 lightbox、返回顶部、图片/短片列表 |
 | **GalleryWallCoverFill** | Galleries 墙视图封面填充 — 当图库首图比例与固定区域(3:2/3:4)不一致时，自适应填满区域，消除视觉空缺 |
 

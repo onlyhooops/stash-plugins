@@ -546,10 +546,6 @@
           button.classList.add('favorited');
           const dislikeBtn = card.querySelector('.favorite-dislike-btn');
           if (dislikeBtn) dislikeBtn.classList.remove('disliked');
-          if (isSceneOrImage(cardInfo.type)) {
-            const el = card.querySelector('.wall-image-wrapper') || card;
-            el.classList.remove('favorite-heart-has-dislike');
-          }
         }
       } else {
         switch (cardInfo.type) {
@@ -606,10 +602,6 @@
           button.classList.add('disliked');
           const heartBtn = card.querySelector('.favorite-heart-btn');
           if (heartBtn) heartBtn.classList.remove('favorited');
-          if (isSceneOrImage(cardInfo.type)) {
-            const el = card.querySelector('.wall-image-wrapper') || card;
-            el.classList.add('favorite-heart-has-dislike');
-          }
         }
       } else {
         switch (cardInfo.type) {
@@ -619,10 +611,6 @@
         }
         if (success) {
           button.classList.remove('disliked');
-          if (isSceneOrImage(cardInfo.type)) {
-            const el = card.querySelector('.wall-image-wrapper') || card;
-            el.classList.remove('favorite-heart-has-dislike');
-          }
         }
       }
     } catch (error) {
@@ -739,9 +727,6 @@
     // like/dislike 互斥：只检查一次，至多显示其一；仅照片/视频参与“隐藏 dislike”逻辑
     const markDisliked = () => {
       dislikeButton.classList.add('disliked');
-      if (isSceneOrImage(cardInfo.type)) {
-        wrapper.classList.add('favorite-heart-has-dislike');
-      }
     };
     if (isInFavoriteTagPage()) {
       heartButton.classList.add('favorited');
@@ -828,9 +813,6 @@
     // like/dislike 互斥：只检查一次，至多显示其一；仅照片/视频参与“隐藏 dislike”逻辑
     const markDisliked = () => {
       dislikeButton.classList.add('disliked');
-      if (cardInfo && isSceneOrImage(cardInfo.type)) {
-        card.classList.add('favorite-heart-has-dislike');
-      }
     };
     if (isInFavoriteTagPage()) {
       heartButton.classList.add('favorited');
