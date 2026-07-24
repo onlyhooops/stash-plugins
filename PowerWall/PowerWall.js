@@ -57,6 +57,9 @@
     enableOnImages: true,
     enableOnScenes: true,
     debug: false,
+    /** 上次筛选中的排序，用于无 URL 参数时恢复默认 */
+    lastSort: 'created_at',
+    lastSortDir: 'DESC',
   };
 
   let _configCache = null;
@@ -167,20 +170,21 @@
     const params = new URLSearchParams(window.location.search);
     const findFilter = {};
     if (params.has('q')) findFilter.q = params.get('q');
-    if (params.has('sortby')) findFilter.sort = params.get('sortby');
-    const sortDir = params.get('sortdir') || '';
-    findFilter.direction = (sortDir.toUpperCase() === 'ASC') ? 'ASC' : 'DESC';
+    const cfg = getConfig();
+    if (params.has('sortby')) {
+      findFilter.sort = params.get('sortby');
+      const sortDir = params.get('sortdir') || '';
+      findFilter.direction = (sortDir.toUpperCase() === 'ASC') ? 'ASC' : 'DESC';
+    } else {
+      findFilter.sort = cfg.lastSort || 'created_at';
+      findFilter.direction = (cfg.lastSortDir || 'DESC').toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    }
     const tagIds = parseIdList(params.get('tags') || params.get('tag_ids'));
     const performerIds = parseIdList(params.get('performers') || params.get('performer_ids'));
     const studioIds = parseIdList(params.get('studios') || params.get('studio_ids'));
     const galleryIds = parseIdList(params.get('galleries') || params.get('gallery_ids'));
-    const pathFilter = params.get('path') || params.get('path_filter') || '';
     const imageFilter = {};
     const sceneFilter = {};
-    if (pathFilter) {
-      imageFilter.path = { value: pathFilter, modifier: 'INCLUDES' };
-      sceneFilter.path = { value: pathFilter, modifier: 'INCLUDES' };
-    }
     if (tagIds.length) {
       imageFilter.tags = { value: tagIds.map(String), modifier: 'INCLUDES' };
       sceneFilter.tags = { value: tagIds.map(String), modifier: 'INCLUDES' };
@@ -273,6 +277,56 @@
     }
   }
 
+  /** 鸟瞰图：根据当前 scale/translate 更新可见区域框，scale>1.05 时显示，否则隐藏 */
+  function updateMinimap(overlay) {
+    if (!overlay?.isConnected) return;
+    const minimapEl = overlay.querySelector('.power-wall-lightbox-minimap');
+    const viewportEl = overlay.querySelector('.power-wall-lightbox-minimap-viewport');
+    const content = overlay.querySelector('.power-wall-lightbox-content');
+    const img = overlay.querySelector('.power-wall-lightbox-img');
+    const s = overlay._lbState;
+    if (!minimapEl || !viewportEl || !content || !img || !s) return;
+    const scale = s.scale;
+    const show = scale > 1.05;
+    if (!show) {
+      minimapEl.classList.remove('power-wall-lightbox-minimap-visible');
+      return;
+    }
+    const cRect = content.getBoundingClientRect();
+    const cw = cRect.width;
+    const ch = cRect.height;
+    const imgW0 = img.offsetWidth;
+    const imgH0 = img.offsetHeight;
+    if (!cw || !ch || !imgW0 || !imgH0) {
+      minimapEl.classList.remove('power-wall-lightbox-minimap-visible');
+      return;
+    }
+    const minimapInner = overlay.querySelector('.power-wall-lightbox-minimap-inner');
+    if (minimapInner && img.naturalWidth && img.naturalHeight) {
+      const aspect = img.naturalWidth / img.naturalHeight;
+      minimapInner.style.setProperty('--minimap-aspect', String(aspect));
+    }
+    const tx = s.translateX;
+    const ty = s.translateY;
+    const imgLeft = cw / 2 + tx - (imgW0 * scale) / 2;
+    const imgTop = ch / 2 + ty - (imgH0 * scale) / 2;
+    const imgW = imgW0 * scale;
+    const imgH = imgH0 * scale;
+    const visLeft = Math.max(0, imgLeft);
+    const visTop = Math.max(0, imgTop);
+    const visRight = Math.min(cw, imgLeft + imgW);
+    const visBottom = Math.min(ch, imgTop + imgH);
+    const leftFrac = (visLeft - imgLeft) / imgW;
+    const topFrac = (visTop - imgTop) / imgH;
+    const widthFrac = (visRight - visLeft) / imgW;
+    const heightFrac = (visBottom - visTop) / imgH;
+    viewportEl.style.left = (leftFrac * 100).toFixed(2) + '%';
+    viewportEl.style.top = (topFrac * 100).toFixed(2) + '%';
+    viewportEl.style.width = (widthFrac * 100).toFixed(2) + '%';
+    viewportEl.style.height = (heightFrac * 100).toFixed(2) + '%';
+    minimapEl.classList.add('power-wall-lightbox-minimap-visible');
+  }
+
   function openBuiltinLightbox(ids, index, type, itemsData) {
     if (!ids?.length || index < 0 || type !== 'images') return;
     const getImageUrl = (id) => `/image/${id}/image`;
@@ -301,6 +355,12 @@
           <img class="power-wall-lightbox-img" alt="" draggable="false">
         </div>
         <button type="button" class="power-wall-lightbox-next" title="下一张">›</button>
+        <div class="power-wall-lightbox-minimap" aria-hidden="true">
+          <div class="power-wall-lightbox-minimap-inner">
+            <img class="power-wall-lightbox-minimap-img" alt="">
+          </div>
+          <div class="power-wall-lightbox-minimap-viewport"></div>
+        </div>
         <div class="power-wall-lightbox-footer">
           <a class="power-wall-lightbox-detail" href="#" target="_blank">查看详情</a>
         </div>
@@ -322,7 +382,7 @@
           overlay._lbWheelAccum = 0;
           overlay._lbWheelPivot = null;
           const factor = 1 - delta * 0.002;
-          const newScale = Math.max(0.2, Math.min(10, s.scale * factor));
+          const newScale = Math.max(0.2, Math.min(20, s.scale * factor));
           if (newScale !== s.scale) {
             const rect = content.getBoundingClientRect();
             const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
@@ -333,6 +393,7 @@
           }
         }
         imgEl.style.transform = `translate3d(${s.translateX}px, ${s.translateY}px, 0) scale(${s.scale})`;
+        updateMinimap(overlay);
       };
       const scheduleApply = () => {
         if (!overlay._lbRaf) overlay._lbRaf = requestAnimationFrame(applyTransform);
@@ -412,7 +473,7 @@
         if (!s || !content || !img) return;
         const rect = content.getBoundingClientRect();
         if (action === 'zoom-in') {
-          const newScale = Math.min(10, s.scale * 1.25);
+          const newScale = Math.min(20, s.scale * 1.25);
           if (newScale !== s.scale) {
             s.translateX *= newScale / s.scale;
             s.translateY *= newScale / s.scale;
@@ -434,7 +495,7 @@
           const cw = rect.width, ch = rect.height;
           const fitScale = (nw && nh && cw && ch) ? Math.min(cw / nw, ch / nh) : 1;
           const targetScale = Math.abs(s.scale - 1) < 0.05 ? (1 / Math.max(0.01, fitScale)) : 1;
-          const newScale = Math.max(0.2, Math.min(10, targetScale));
+          const newScale = Math.max(0.2, Math.min(20, targetScale));
           s.translateX = s.translateX * (newScale / s.scale);
           s.translateY = s.translateY * (newScale / s.scale);
           s.scale = newScale;
@@ -500,6 +561,9 @@
         img.src = getImageUrl(id);
         if (img.complete && img.naturalWidth) showImg();
         img.style.transform = 'translate3d(0,0,0) scale(1)';
+        const minimapImg = overlay.querySelector('.power-wall-lightbox-minimap-img');
+        if (minimapImg) minimapImg.src = getImageUrl(id);
+        updateMinimap(overlay);
       }
       if (infobarEl) {
         const itemData = overlay._lbItemsData?.[idx];
@@ -619,6 +683,10 @@
       this.rowGap = options.rowGap ?? 3;
       this.columnGap = options.columnGap ?? 3;
       this.items = [];
+      // 增量重排状态：布局参数不变时仅排列新增项，避免 O(n²) 样式写入
+      this._layoutKey = '';
+      this._columnHeights = null;
+      this._laidOutCount = 0;
     }
 
     getContainerWidth() {
@@ -658,9 +726,21 @@
 
       const columnCount = this.getColumnCount();
       const columnWidth = this.getColumnWidth();
-      const columnHeights = new Array(columnCount).fill(0);
+      // 布局参数指纹：任一变化（宽度/列数/间距）则全量重排，否则仅排列新增项
+      const layoutKey = `${containerWidth}|${columnCount}|${columnWidth}|${this.margin}|${this.rowGap}|${this.columnGap}`;
 
-      for (const item of this.items) {
+      let columnHeights;
+      let startIndex;
+      if (this._layoutKey === layoutKey && this._columnHeights && this._laidOutCount > 0) {
+        columnHeights = this._columnHeights;
+        startIndex = this._laidOutCount;
+      } else {
+        columnHeights = new Array(columnCount).fill(0);
+        startIndex = 0;
+      }
+
+      for (let i = startIndex; i < this.items.length; i++) {
+        const item = this.items[i];
         const srcW = item.width;
         const srcH = item.height;
         if (!srcW || !srcH) continue;
@@ -684,6 +764,10 @@
         columnHeights[colIndex] = top + displayHeight + this.rowGap;
       }
 
+      this._layoutKey = layoutKey;
+      this._columnHeights = columnHeights;
+      this._laidOutCount = this.items.length;
+
       const maxHeight = columnHeights.length ? Math.max(...columnHeights) - this.rowGap + this.margin : 0;
       this.container.style.height = `${maxHeight}px`;
       this.container.style.padding = `${this.margin}px`;
@@ -693,10 +777,44 @@
 
     clear() {
       this.items = [];
+      this._layoutKey = '';
+      this._columnHeights = null;
+      this._laidOutCount = 0;
       this.container.style.height = '0';
       this.container.style.padding = '0';
       this.container.style.margin = '0 auto';
     }
+
+    /** 数组顺序变化后（如标题重排），使增量缓存失效，强制全量重排 */
+    forceFullRelayout() {
+      this._layoutKey = '';
+      this._columnHeights = null;
+      this._laidOutCount = 0;
+      this.relayout();
+    }
+  }
+
+  // ==================== 标题数字感知排序（日系写真） ====================
+  // 主键：文件名中第一串数字的前导零个数（0 个零一组、1 个零一组……）
+  // 次键：同组内按去前导零后的数值；方向同时作用于两个维度
+  // 注：取文件名内首个数字串而非严格开头——写真文件常带 DSC_/img_ 等前缀，严格开头会全部落入兜底组
+  function parseTitleNumKey(title) {
+    const m = String(title || '').match(/(\d+)/);
+    if (!m) return null;
+    const digits = m[1];
+    const stripped = digits.replace(/^0+/, '');
+    return { zeros: digits.length - stripped.length, value: parseInt(stripped || '0', 10) };
+  }
+  function compareByTitle(titleA, titleB, dir) {
+    const sign = dir === 'ASC' ? 1 : -1;
+    const ka = parseTitleNumKey(titleA);
+    const kb = parseTitleNumKey(titleB);
+    if (!ka && !kb) return String(titleA || '').localeCompare(String(titleB || '')) * sign;
+    if (!ka) return 1;   // 无数字串恒排数字组之后
+    if (!kb) return -1;
+    if (ka.zeros !== kb.zeros) return (ka.zeros - kb.zeros) * sign;
+    if (ka.value !== kb.value) return (ka.value - kb.value) * sign;
+    return String(titleA || '').localeCompare(String(titleB || '')) * sign;
   }
 
   // ==================== 无限滚动 ====================
@@ -818,6 +936,13 @@
       this.isEnabled = false;
       this.loadingIndicator = null;
       this.resizeHandler = null;
+      // 用于“分块逐步渲染”的滚动速度采样（px/s）
+      this._scrollSpeedPxPerSec = 0;
+      this._scrollSpeedLastY = 0;
+      this._scrollSpeedLastT = 0;
+      this._boundScrollSpeedTracker = null;
+      // 标题排序方向（'ASC'/'DESC'，null=未启用；不持久化，刷新/随览/随阅/切换路由时自动释放）
+      this.titleSortDir = null;
     }
 
     async init() {
@@ -885,6 +1010,12 @@
           this.resizeHandler();
         }
       }, 500);
+      // 采样滚动速度：用于动态决定每批渲染大小，避免高速度下一次性重排掉帧
+      this._scrollSpeedLastY = window.scrollY || document.documentElement.scrollTop || 0;
+      this._scrollSpeedLastT = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      this._scrollSpeedPxPerSec = 0;
+      this._boundScrollSpeedTracker = () => { this.recordScrollSpeed(); };
+      window.addEventListener('scroll', this._boundScrollSpeedTracker, { passive: true });
       this.createBackToTopButton();
     }
 
@@ -927,6 +1058,10 @@
       if (!this.isEnabled) return;
       this.isEnabled = false;
       this.destroyBackToTopButton();
+      if (this._boundScrollSpeedTracker) {
+        window.removeEventListener('scroll', this._boundScrollSpeedTracker);
+        this._boundScrollSpeedTracker = null;
+      }
       if (this.abortController) { this.abortController.abort(); this.abortController = null; }
       document.body.classList.remove('power-wall-active');
       document.documentElement.classList.remove('power-wall-preload');
@@ -943,6 +1078,51 @@
       this.brickWall = null;
       this.items = [];
       this.page = 1;
+    }
+
+    recordScrollSpeed() {
+      if (!this.isEnabled) return;
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      const t = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+      const lastT = this._scrollSpeedLastT;
+      const lastY = this._scrollSpeedLastY;
+
+      if (!lastT) {
+        this._scrollSpeedLastT = t;
+        this._scrollSpeedLastY = y;
+        return;
+      }
+      const dt = t - lastT;
+      if (dt < 16) return; // 降噪：过于频繁的采样会让速度抖动
+      const dy = y - lastY;
+      const speed = Math.abs(dy) / dt * 1000; // px/s
+      // 指数滑动平均，降低抖动
+      this._scrollSpeedPxPerSec = this._scrollSpeedPxPerSec
+        ? this._scrollSpeedPxPerSec * 0.7 + speed * 0.3
+        : speed;
+
+      this._scrollSpeedLastT = t;
+      this._scrollSpeedLastY = y;
+    }
+
+    getProgressiveChunkSize(remaining, itemsPerPage) {
+      const v = this._scrollSpeedPxPerSec || 0;
+      let size;
+      // 滚动越快 -> 每批越小（降低单次 DOM/重排成本）
+      if (v > 3500) size = 5;
+      else if (v > 2000) size = 8;
+      else if (v > 1100) size = 12;
+      else size = 16;
+
+      // 也不超过配置允许的上限
+      const maxFromConfig = Math.max(4, Math.floor(itemsPerPage / 2));
+      size = Math.min(size, maxFromConfig);
+      size = Math.max(3, size);
+      return Math.min(remaining, size);
+    }
+
+    waitNextFrame() {
+      return new Promise((resolve) => requestAnimationFrame(resolve));
     }
 
     handleItemClick(e) {
@@ -990,6 +1170,8 @@
           <div class="power-wall-toggle">
             <button type="button" class="power-wall-toggle-btn" data-action="random" title="随机浏览"><span class="pw-btn-icon">🎲</span><span class="pw-btn-text">随览</span></button>
             ${this.pageType === 'images' ? '<button type="button" class="power-wall-toggle-btn" data-action="randomGallery" title="随机打开一个图库"><span class="pw-btn-icon">📖</span><span class="pw-btn-text">随阅</span></button>' : ''}
+            <button type="button" class="power-wall-toggle-btn" data-action="titleAsc" title="按文件名升序（前导零分组 + 数值）"><span class="pw-btn-icon">⬆</span><span class="pw-btn-text">升序</span></button>
+            <button type="button" class="power-wall-toggle-btn" data-action="titleDesc" title="按文件名降序（前导零分组 + 数值）"><span class="pw-btn-icon">⬇</span><span class="pw-btn-text">降序</span></button>
             <button type="button" class="power-wall-toggle-btn" data-action="filter" title="筛选"><span class="pw-btn-icon">🔍</span><span class="pw-btn-text">筛选</span></button>
             <button type="button" class="power-wall-toggle-btn" data-action="settings" title="设置"><span class="pw-btn-icon">⚙️</span><span class="pw-btn-text">设置</span></button>
             <button type="button" class="power-wall-toggle-btn" data-action="refresh" title="刷新"><span class="pw-btn-icon">🔄</span><span class="pw-btn-text">刷新</span></button>
@@ -1026,6 +1208,8 @@
         else if (action === 'refresh') this.refresh();
         else if (action === 'random') this.loadRandom();
         else if (action === 'randomGallery') this.loadRandomGallery();
+        else if (action === 'titleAsc') this.setTitleSort('ASC');
+        else if (action === 'titleDesc') this.setTitleSort('DESC');
         else if (action === 'original') this.disable();
       });
     }
@@ -1060,6 +1244,48 @@
       }
     }
 
+    /** 按标题数字感知排序：设置方向并立即对已加载项重排（同向再点视为重复，忽略）*/
+    setTitleSort(dir) {
+      if (!this.isEnabled || this.titleSortDir === dir) return;
+      this.titleSortDir = dir;
+      this.applyTitleSort();
+      this.updateTitleSortButtons();
+    }
+
+    /** 排序用标题：优先真实文件名（visual_files/files 的 basename），空 title 会退化为 #ID，不适用数字排序 */
+    getItemSortTitle(data) {
+      const fileBase = this.pageType === 'images'
+        ? data?.visual_files?.[0]?.basename
+        : data?.files?.[0]?.basename;
+      return fileBase || data?.title || `#${data?.id ?? ''}`;
+    }
+
+    /** 对已加载项按标题重排：同步重排 items 与 brickWall 平行数组，并同步 DOM 顺序 */
+    applyTitleSort() {
+      if (!this.titleSortDir || !this.brickWall || !this.items.length) return;
+      const dir = this.titleSortDir;
+      const combined = this.items.map((entry, i) => ({ entry, wallItem: this.brickWall.items[i] }));
+      combined.sort((a, b) => compareByTitle(
+        this.getItemSortTitle(a.entry.data),
+        this.getItemSortTitle(b.entry.data),
+        dir
+      ));
+      this.items = combined.map(c => c.entry);
+      this.brickWall.items = combined.map(c => c.wallItem).filter(Boolean);
+      const fragment = document.createDocumentFragment();
+      this.brickWall.items.forEach(wi => fragment.appendChild(wi.element));
+      this.wallContainer.appendChild(fragment);
+      this.brickWall.forceFullRelayout();
+    }
+
+    updateTitleSortButtons() {
+      this.container?.querySelectorAll('[data-action="titleAsc"], [data-action="titleDesc"]').forEach(btn => {
+        const active = (btn.dataset.action === 'titleAsc' && this.titleSortDir === 'ASC')
+          || (btn.dataset.action === 'titleDesc' && this.titleSortDir === 'DESC');
+        btn.classList.toggle('power-wall-toggle-btn-active', active);
+      });
+    }
+
     async fetchData() {
       const { findFilter, imageFilter, sceneFilter } = getFilterFromUrl();
       const perPage = getConfig().itemsPerPage;
@@ -1078,7 +1304,7 @@
             images {
               id title rating100 o_counter
               paths { thumbnail preview image }
-              visual_files { ... on ImageFile { width height path } }
+              visual_files { ... on ImageFile { width height path basename } }
               tags { id name } galleries { id title folder { path } }
             }
           }
@@ -1092,7 +1318,7 @@
             scenes {
               id title details rating100 o_counter date
               paths { screenshot preview stream }
-              files { width height duration }
+              files { width height duration basename }
               tags { id name } performers { id name } studio { id name }
             }
           }
@@ -1108,37 +1334,69 @@
     }
 
     async addItemsBatch(itemsData) {
+      if (!this.wallContainer || !itemsData?.length) return;
       const cfg = getConfig();
       this.brickWall.margin = cfg.margin;
       this.brickWall.rowGap = cfg.rowGap;
       this.brickWall.columnGap = cfg.columnGap;
-      const dimPromises = itemsData.map((d) => this.getImageDimensions(this.getItemThumbnail(d), d));
-      const dims = await Promise.all(dimPromises);
-      const fragment = document.createDocumentFragment();
-      const prepared = [];
+
       const useLightbox = cfg.enableLightbox !== false;
-      for (let i = 0; i < itemsData.length; i++) {
-        const data = itemsData[i];
-        const item = this.createItemElement(data, useLightbox);
-        if (!item) continue;
-        const d = dims[i];
-        const width = (d && d.width) ? d.width : 16;
-        const height = (d && d.height) ? d.height : 9;
-        prepared.push({ element: item, data, width, height });
-        fragment.appendChild(item);
+      const itemsPerPage = cfg.itemsPerPage || itemsData.length;
+
+      // 分块逐步插入 + 分块重排，避免一次性插入 40 个导致掉帧/卡顿
+      let cursor = 0;
+      let isFirstChunk = true;
+
+      while (cursor < itemsData.length) {
+        if (!this.isEnabled || this.abortController?.signal?.aborted) return;
+        const remaining = itemsData.length - cursor;
+        const chunkSize = this.getProgressiveChunkSize(remaining, itemsPerPage);
+        const end = Math.min(itemsData.length, cursor + chunkSize);
+
+        const fragment = document.createDocumentFragment();
+        const prepared = [];
+
+        for (let i = cursor; i < end; i++) {
+          const data = itemsData[i];
+          const item = this.createItemElement(data, useLightbox);
+          if (!item) continue;
+          const d = this.getImageDimensions(this.getItemThumbnail(data), data);
+          const width = (d && d.width) ? d.width : 16;
+          const height = (d && d.height) ? d.height : 9;
+          prepared.push({ element: item, data, width, height });
+          fragment.appendChild(item);
+        }
+
+        if (!this.wallContainer) return;
+        this.wallContainer.appendChild(fragment);
+
+        for (const p of prepared) {
+          this.brickWall.addItem(p.element, p.width, p.height);
+          this.items.push({ element: p.element, data: p.data });
+        }
+
+        this.brickWall.relayout();
+        this.updateCount();
+
+        prepared.forEach(({ element, data }) => {
+          try {
+            element.dispatchEvent(new CustomEvent('enhancedWallItemAdded', { detail: { item: element, data, type: this.pageType }, bubbles: true }));
+          } catch (_) {}
+        });
+
+        cursor = end;
+
+        // 标题排序激活时，对全量已加载项重排（含本批），保证滚动加载后顺序仍一致
+        if (this.titleSortDir) this.applyTitleSort();
+
+        // 第一批出来后尽快隐藏 loading；后续分批插入对用户“感知更连续”
+        if (isFirstChunk) {
+          isFirstChunk = false;
+          this.showLoading(false);
+        }
+
+        if (cursor < itemsData.length) await this.waitNextFrame();
       }
-      if (!this.wallContainer) return;
-      this.wallContainer.appendChild(fragment);
-      for (const p of prepared) {
-        this.brickWall.addItem(p.element, p.width, p.height);
-        this.items.push({ element: p.element, data: p.data });
-      }
-      this.brickWall.relayout();
-      prepared.forEach(({ element, data }) => {
-        try {
-          element.dispatchEvent(new CustomEvent('enhancedWallItemAdded', { detail: { item: element, data, type: this.pageType }, bubbles: true }));
-        } catch (_) {}
-      });
     }
 
     createItemElement(data, useLightbox) {
@@ -1210,8 +1468,8 @@
       let width, height;
       if (data.files?.[0]) { width = data.files[0].width; height = data.files[0].height; }
       else if (data.visual_files?.[0]) { width = data.visual_files[0].width; height = data.visual_files[0].height; }
-      if (width && height) return Promise.resolve({ width, height });
-      return Promise.resolve({ width: 16, height: 9 });
+      if (width && height) return { width, height };
+      return { width: 16, height: 9 };
     }
     updateCount() {
       const el = this.container?.querySelector('.power-wall-count');
@@ -1241,6 +1499,8 @@
       this.items.forEach(item => item.element?.remove());
       this.items = [];
       this.page = 1;
+      this.titleSortDir = null;
+      this.updateTitleSortButtons();
       if (this.brickWall) this.brickWall.clear();
       if (this.scroller) this.scroller.reset();
       await this.loadMore();
@@ -1286,36 +1546,31 @@
     }
 
     async fetchFilterOptions() {
-      const [tagsRes, performersRes, studiosRes, foldersRes] = await Promise.all([
+      const [tagsRes, performersRes, studiosRes] = await Promise.all([
         graphqlRequest('query { findTags(filter: { per_page: 80 }) { tags { id name } } }'),
         graphqlRequest('query { findPerformers(filter: { per_page: 80 }) { performers { id name } } }'),
         graphqlRequest('query { findStudios(filter: { per_page: 80 }) { studios { id name } } }'),
-        graphqlRequest('query { findFolders(filter: { per_page: 300 }) { folders { id path } } }'),
       ]);
-      const folders = (foldersRes?.findFolders?.folders || []).map(f => (f.path || '').trim()).filter(Boolean).sort();
       return {
         tags: tagsRes?.findTags?.tags || [],
         performers: performersRes?.findPerformers?.performers || [],
         studios: studiosRes?.findStudios?.studios || [],
-        folders: [...new Set(folders)],
       };
     }
 
     async openFilterPanel() {
       const params = new URLSearchParams(window.location.search);
+      const cfg = getConfig();
       const currentQ = params.get('q') || '';
-      const currentPath = params.get('path') || params.get('path_filter') || '';
       const currentTags = params.get('tags') || params.get('tag_ids') || '';
       const currentPerformers = params.get('performers') || params.get('performer_ids') || '';
       const currentStudios = params.get('studios') || params.get('studio_ids') || '';
-      const sortbyParam = params.get('sortby') || 'created_at';
+      const sortbyParam = params.get('sortby') || cfg.lastSort || 'created_at';
       const currentSort = sortbyParam.startsWith('random_') ? 'random' : sortbyParam;
-      const currentSortDir = (params.get('sortdir') || 'DESC').toUpperCase();
+      const currentSortDir = (params.get('sortdir') || cfg.lastSortDir || 'DESC').toUpperCase();
       let modal = document.getElementById('power-wall-filter-modal');
       if (modal) {
         modal.querySelector('#pw-filter-q').value = currentQ;
-        const pathEl = modal.querySelector('#pw-filter-path');
-        if (pathEl) pathEl.value = currentPath || '';
         modal.querySelector('#pw-filter-sortby').value = currentSort;
         modal.querySelector('#pw-filter-sortdir').value = currentSortDir === 'ASC' ? 'ASC' : 'DESC';
         this.populateFilterCheckboxes(modal, currentTags, currentPerformers, currentStudios);
@@ -1337,12 +1592,6 @@
             <div class="power-wall-settings-section">
               <h4>关键词</h4>
               <input type="text" class="power-wall-filter-input" id="pw-filter-q" placeholder="搜索" value="${currentQ.replace(/"/g, '&quot;')}">
-            </div>
-            <div class="power-wall-settings-section">
-              <h4>路径</h4>
-              <select id="pw-filter-path" class="power-wall-filter-select">
-                <option value="">不限</option>
-              </select>
             </div>
             <div class="power-wall-settings-section">
               <h4>排序</h4>
@@ -1386,14 +1635,6 @@
         renderCheckboxList('pw-filter-tags', opts.tags, currentTags, 'name');
         renderCheckboxList('pw-filter-performers', opts.performers, currentPerformers, 'name');
         renderCheckboxList('pw-filter-studios', opts.studios, currentStudios, 'name');
-        const pathSelect = modal.querySelector('#pw-filter-path');
-        opts.folders?.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p;
-          opt.textContent = p;
-          if (p === currentPath) opt.selected = true;
-          pathSelect.appendChild(opt);
-        });
       } catch (e) {
         const tagsEl = modal.querySelector('#pw-filter-tags');
         if (tagsEl) tagsEl.textContent = '加载失败';
@@ -1401,16 +1642,15 @@
       const getSelectedIds = (id) => [...(modal.querySelector('#' + id)?.querySelectorAll('input:checked') || [])].map(cb => cb.value).filter(Boolean);
       const applyFilter = () => {
         const q = modal.querySelector('#pw-filter-q')?.value?.trim() || '';
-        const pathVal = modal.querySelector('#pw-filter-path')?.value?.trim() || '';
         let sortby = modal.querySelector('#pw-filter-sortby')?.value || 'created_at';
         const sortdir = modal.querySelector('#pw-filter-sortdir')?.value || 'DESC';
         if (sortby === 'random') sortby = 'random_' + Date.now();
+        if (!sortby.startsWith('random_')) saveConfig({ lastSort: sortby, lastSortDir: sortdir });
         const tags = getSelectedIds('pw-filter-tags');
         const performers = getSelectedIds('pw-filter-performers');
         const studios = getSelectedIds('pw-filter-studios');
         const url = new URL(window.location.href);
         if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
-        if (pathVal) url.searchParams.set('path', pathVal); else url.searchParams.delete('path');
         url.searchParams.set('sortby', sortby);
         if (sortby.startsWith('random_')) url.searchParams.delete('sortdir');
         else url.searchParams.set('sortdir', sortdir);
@@ -1423,6 +1663,7 @@
         this.refresh();
       };
       const clearFilter = () => {
+        saveConfig({ lastSort: 'created_at', lastSortDir: 'DESC' });
         window.history.pushState({}, '', window.location.origin + window.location.pathname);
         modal.style.display = 'none';
         this.refresh();
@@ -1556,13 +1797,14 @@
     powerWall = new PowerWall();
     powerWall.enable(container);
   }
-  function unmountPowerWall() {
+  function unmountPowerWall(keepPreload) {
     if (powerWall) { powerWall.disable(); powerWall = null; }
     document.body.classList.remove('power-wall-active');
     document.body.classList.remove('power-wall-lightbox-open');
     document.body.style.paddingRight = '';
     document.documentElement.style.paddingRight = '';
-    document.documentElement.classList.remove('power-wall-preload');
+    // 列表页之间切换时保留 preload，避免重建间隙原生网格闪出
+    if (!keepPreload) document.documentElement.classList.remove('power-wall-preload');
     document.getElementById('power-wall-back-to-top')?.remove();
     const overlay = document.getElementById('power-wall-lightbox-overlay');
     if (overlay?.classList.contains('power-wall-lightbox-visible')) {
@@ -1576,10 +1818,16 @@
     api.Event.addEventListener('stash:location', (e) => {
       const path = e.detail?.data?.location?.pathname || window.location.pathname;
       document.body.classList.add('power-wall-transitioning');
-      unmountPowerWall();
-      if (!isExcludedPath(path) && isListPath(path)) {
+      const toList = !isExcludedPath(path) && isListPath(path);
+      unmountPowerWall(toList);
+      if (toList) {
+        // 目标仍是列表页：立即隐藏原生列表，避免重建窗口内原生网格闪出
+        document.documentElement.classList.add('power-wall-preload');
+        // 立即挂载新墙，不再等待 300ms；300ms 处仅做存活检查：
+        // 若 React 路由重绘将容器冲掉（detached），再兜底重建一次
+        init();
         setTimeout(() => {
-          init();
+          if (!powerWall || !powerWall.container?.isConnected) init();
           requestAnimationFrame(() => document.body.classList.remove('power-wall-transitioning'));
         }, 300);
       } else {
@@ -1596,12 +1844,17 @@
       lastUrl = location.href;
       if (initTimeout) clearTimeout(initTimeout);
       document.body.classList.add('power-wall-transitioning');
-      unmountPowerWall();
       const path = window.location.pathname;
-      if (!isExcludedPath(path) && isListPath(path)) {
+      const toList = !isExcludedPath(path) && isListPath(path);
+      unmountPowerWall(toList);
+      if (toList) {
+        // 目标仍是列表页：立即隐藏原生列表，避免重建窗口内原生网格闪出
+        document.documentElement.classList.add('power-wall-preload');
+        // 立即挂载新墙；300ms 处仅做存活检查，容器被 React 冲掉则兜底重建
+        init();
         initTimeout = setTimeout(() => {
           initTimeout = null;
-          init();
+          if (!powerWall || !powerWall.container?.isConnected) init();
           requestAnimationFrame(() => document.body.classList.remove('power-wall-transitioning'));
         }, 300);
       } else {

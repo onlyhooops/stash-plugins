@@ -1,6 +1,6 @@
 name: FavoriteHeart
 description: 红心/心碎收藏，like/dislike 互斥
-version: 1.3.0
+version: 1.5.0
 ui:
   javascript:
     - FavoriteHeart.js

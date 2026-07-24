@@ -182,9 +182,10 @@
 }
 
 /* === 预览墙视图（Wall View）=== */
-.wall-item {
-  position: relative !important;
-}
+/* 注意：不要强制设置 .wall-item 的 position。
+   Stash 墙视图引擎通过 inline style 设置 position: absolute 来定位子项，
+   CSS !important 会覆盖导致布局崩溃（图库墙视图照片散乱）。
+   定位上下文由 addHeartButton JS 通过 inline style 按需设置。 */
 
 .wall-item:hover .favorite-heart-btn,
 .wall-item:hover .favorite-dislike-btn {
@@ -225,9 +226,9 @@
 }
 
 /* === Flexbin 图库视图（Gallery页面内部）=== */
-.flexbin > * {
-  position: relative;
-}
+/* 注意：不强制设置 .flexbin > * 的 position。
+   Flexbin 布局依赖其自身的 CSS 定位规则，覆盖会导致布局异常。
+   红心按钮的定位上下文由 .gallery-card .thumbnail-section 的 position: relative 提供。 */
 
 .flexbin > *:hover .favorite-heart-btn,
 .flexbin > *:hover .favorite-dislike-btn {

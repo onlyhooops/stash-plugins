@@ -279,6 +279,11 @@ html.power-wall-preload .gallery-card {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.power-wall-toggle-btn.power-wall-toggle-btn-active {
+  background: rgba(137, 87, 229, 0.35);
+  border-color: var(--primary-color, #8957e5);
+}
+
 .power-wall-toggle-btn .pw-btn-icon {
   display: inline;
 }
@@ -330,6 +335,14 @@ body.power-wall-lightbox-open {
 .power-wall-active .power-wall-region .image-card,
 .power-wall-active .power-wall-region .scene-card,
 .power-wall-active .power-wall-region .gallery-card {
+  display: none !important;
+}
+
+/* 彻底屏蔽：激活后隐藏区域内除插件容器/挂载点外的所有直接子节点。
+   覆盖前序兄弟节点（React 重绘可能把原生节点插到容器之前，`~ *` 无法覆盖）。
+   :has 限定容器真实存在才生效，避免容器创建失败时整页空白。 */
+.power-wall-active .power-wall-region:has(> .power-wall-container) > *:not(.power-wall-container):not(.power-wall-mount),
+.power-wall-active .power-wall-region:has(> .power-wall-mount) > *:not(.power-wall-container):not(.power-wall-mount) {
   display: none !important;
 }
 
@@ -729,23 +742,26 @@ body.power-wall-lightbox-open {
   width: 40px;
   height: 40px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   font-size: 1.1rem;
   cursor: pointer;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
 }
 
 .power-wall-lightbox-btn:hover,
 .power-wall-lightbox-close:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.7);
   color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .power-wall-lightbox-btn[data-action="toggle-1to1"] {
@@ -761,24 +777,27 @@ body.power-wall-lightbox-open {
   width: 48px;
   height: 48px;
   padding: 0;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   font-size: 1.75rem;
   cursor: pointer;
   z-index: 2;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
   line-height: 1;
 }
 
 .power-wall-lightbox-prev:hover,
 .power-wall-lightbox-next:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.7);
   color: #fff;
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
 
 .power-wall-lightbox-prev {
@@ -789,16 +808,69 @@ body.power-wall-lightbox-open {
   right: 1rem;
 }
 
+.power-wall-lightbox-minimap {
+  position: absolute;
+  bottom: 4rem;
+  left: 1rem;
+  max-width: 150px;
+  max-height: 110px;
+  width: fit-content;
+  height: fit-content;
+  z-index: 2;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.power-wall-lightbox-minimap.power-wall-lightbox-minimap-visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* 内层随照片纵横比自适应：竖图变窄高，横图变宽扁，均不超过 150×110 */
+.power-wall-lightbox-minimap-inner {
+  position: relative;
+  width: min(150px, calc(110px * var(--minimap-aspect, 1.78)));
+  height: min(110px, calc(150px / var(--minimap-aspect, 1.78)));
+  overflow: hidden;
+  background: #000;
+}
+
+.power-wall-lightbox-minimap-inner img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.power-wall-lightbox-minimap-viewport {
+  position: absolute;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
+}
+
 .power-wall-lightbox-content {
   position: absolute;
   inset: 4rem 5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
+  overflow: visible;
   cursor: grab;
   z-index: 1;
-  contain: content;
+  contain: none;
 }
 
 .power-wall-lightbox-content:active {

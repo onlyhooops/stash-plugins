@@ -81,90 +81,112 @@
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'same-origin',
         body: JSON.stringify({ query, variables }),
       });
-      
+      if (!response.ok) {
+        console.error('[FavoriteHeart] GraphQL HTTP ' + response.status + ': ' + response.statusText);
+        return null;
+      }
       const result = await response.json();
       if (result.errors) {
-        console.error('GraphQL错误:', result.errors);
+        const firstMsg = result.errors[0]?.message || '';
+        console.error('[FavoriteHeart] GraphQL ' + result.errors.length + ' errors. First: ' + firstMsg);
         return null;
       }
       return result.data;
     } catch (error) {
-      console.error('请求失败:', error);
+      console.error('[FavoriteHeart] 请求失败:', error);
       return null;
     }
   }
 
   /**
-   * 获取或创建"精选集"标签
+   * 获取或创建"精选集"标签（带 ID 缓存与并发去重）
    */
+  let favoriteTagIdCache = null;
+  let favoriteTagPromise = null;
   async function getFavoriteTag() {
-    // 先查找标签是否存在
-    const findQuery = `
-      query FindTags($filter: String!) {
-        findTags(tag_filter: { name: { value: $filter, modifier: EQUALS } }) {
-          tags {
+    if (favoriteTagIdCache) return favoriteTagIdCache;
+    if (favoriteTagPromise) return favoriteTagPromise;
+    favoriteTagPromise = (async () => {
+      // 先查找标签是否存在
+      const findQuery = `
+        query FindTags($filter: String!) {
+          findTags(tag_filter: { name: { value: $filter, modifier: EQUALS } }) {
+            tags {
+              id
+              name
+            }
+          }
+        }
+      `;
+      const findResult = await graphqlRequest(findQuery, { filter: CONFIG.FAVORITE_TAG_NAME });
+      if (findResult?.findTags?.tags?.length > 0) {
+        return findResult.findTags.tags[0].id;
+      }
+      // 如果不存在，创建新标签
+      const createQuery = `
+        mutation TagCreate($input: TagCreateInput!) {
+          tagCreate(input: $input) {
             id
             name
           }
         }
-      }
-    `;
-    
-    const findResult = await graphqlRequest(findQuery, { filter: CONFIG.FAVORITE_TAG_NAME });
-    
-    if (findResult?.findTags?.tags?.length > 0) {
-      return findResult.findTags.tags[0].id;
-    }
-    
-    // 如果不存在，创建新标签
-    const createQuery = `
-      mutation TagCreate($input: TagCreateInput!) {
-        tagCreate(input: $input) {
-          id
-          name
-        }
-      }
-    `;
-    
-    const createResult = await graphqlRequest(createQuery, {
-      input: { name: CONFIG.FAVORITE_TAG_NAME }
+      `;
+      const createResult = await graphqlRequest(createQuery, {
+        input: { name: CONFIG.FAVORITE_TAG_NAME }
+      });
+      return createResult?.tagCreate?.id;
+    })().then(id => {
+      if (id) favoriteTagIdCache = id;
+      favoriteTagPromise = null;
+      return id;
     });
-    
-    return createResult?.tagCreate?.id;
+    return favoriteTagPromise;
   }
 
   /**
-   * 获取或创建「不喜欢」标签
+   * 获取或创建「不喜欢」标签（带 ID 缓存与并发去重）
    */
+  let dislikeTagIdCache = null;
+  let dislikeTagPromise = null;
   async function getDislikeTag() {
-    const findQuery = `
-      query FindTags($filter: String!) {
-        findTags(tag_filter: { name: { value: $filter, modifier: EQUALS } }) {
-          tags {
+    if (dislikeTagIdCache) return dislikeTagIdCache;
+    if (dislikeTagPromise) return dislikeTagPromise;
+    dislikeTagPromise = (async () => {
+      const findQuery = `
+        query FindTags($filter: String!) {
+          findTags(tag_filter: { name: { value: $filter, modifier: EQUALS } }) {
+            tags {
+              id
+              name
+            }
+          }
+        }
+      `;
+      const findResult = await graphqlRequest(findQuery, { filter: CONFIG.DISLIKE_TAG_NAME });
+      if (findResult?.findTags?.tags?.length > 0) {
+        return findResult.findTags.tags[0].id;
+      }
+      const createQuery = `
+        mutation TagCreate($input: TagCreateInput!) {
+          tagCreate(input: $input) {
             id
             name
           }
         }
-      }
-    `;
-    const findResult = await graphqlRequest(findQuery, { filter: CONFIG.DISLIKE_TAG_NAME });
-    if (findResult?.findTags?.tags?.length > 0) {
-      return findResult.findTags.tags[0].id;
-    }
-    const createQuery = `
-      mutation TagCreate($input: TagCreateInput!) {
-        tagCreate(input: $input) {
-          id
-          name
-        }
-      }
-    `;
-    const createResult = await graphqlRequest(createQuery, {
-      input: { name: CONFIG.DISLIKE_TAG_NAME }
+      `;
+      const createResult = await graphqlRequest(createQuery, {
+        input: { name: CONFIG.DISLIKE_TAG_NAME }
+      });
+      return createResult?.tagCreate?.id;
+    })().then(id => {
+      if (id) dislikeTagIdCache = id;
+      dislikeTagPromise = null;
+      return id;
     });
-    return createResult?.tagCreate?.id;
+    return dislikeTagPromise;
   }
 
   /**
@@ -419,86 +441,82 @@
   }
 
   /**
-   * 检查是否已收藏
+   * 批量查询卡片收藏/不喜欢状态
+   * 逐卡查询会产生 2N 条 GraphQL 请求（N=卡片数），
+   * 这里按类型聚合成队列，150ms 窗口内每类型只发 1 条 HTTP 请求。
+   * 注意：部分 Stash 版本的 FindFilterType 不支持 ids 过滤，
+   * 因此使用 GraphQL 别名在单请求内并发多个 findXxx(id:...) 字段。
    */
-  async function checkIfFavorited(type, id) {
-    let query;
-    switch(type) {
-      case 'scenes':
-        query = `
-          query FindScene($id: ID!) {
-            findScene(id: $id) {
-              tags { name }
-            }
-          }
-        `;
-        break;
-      case 'images':
-        query = `
-          query FindImage($id: ID!) {
-            findImage(id: $id) {
-              tags { name }
-            }
-          }
-        `;
-        break;
-      case 'galleries':
-        query = `
-          query FindGallery($id: ID!) {
-            findGallery(id: $id) {
-              tags { name }
-            }
-          }
-        `;
-        break;
-      default:
-        return false;
-    }
-    
-    const result = await graphqlRequest(query, { id });
-    const tags = result?.[`find${type.slice(0, -1).charAt(0).toUpperCase() + type.slice(1, -1)}`]?.tags || [];
-    return tags.some(tag => tag.name === CONFIG.FAVORITE_TAG_NAME);
+  const CARD_TYPES = ['scenes', 'images', 'galleries'];
+  // 单数实体名显式映射（不能靠 slice 推导：galleries → Gallery，而非 Gallerie）
+  const TYPE_ENTITY = { scenes: 'Scene', images: 'Image', galleries: 'Gallery' };
+  const statusQueues = { scenes: new Map(), images: new Map(), galleries: new Map() };
+  let statusFlushTimer = null;
+  const STATUS_FLUSH_DELAY = 150;
+  const STATUS_BATCH_CHUNK = 200; // 单请求别名上限，防止超长查询
+  const STATUS_FALLBACK_CONCURRENCY = 5; // 批量查询失败时，降级为每 N 个 ID 单独发请求的并发上限
+
+  function requestCardStatus(type, id) {
+    return new Promise((resolve) => {
+      const queue = statusQueues[type];
+      // ID 仅允许数字（别名内联进查询字符串，防注入）
+      if (!queue || !/^\d+$/.test(String(id))) {
+        resolve({ favorited: false, disliked: false });
+        return;
+      }
+      queue.set(String(id), resolve);
+      if (!statusFlushTimer) {
+        statusFlushTimer = setTimeout(flushStatusQueues, STATUS_FLUSH_DELAY);
+      }
+    });
   }
 
-  /**
-   * 检查是否已标记为不喜欢
-   */
-  async function checkIfDisliked(type, id) {
-    let query;
-    switch(type) {
-      case 'scenes':
-        query = `
-          query FindScene($id: ID!) {
-            findScene(id: $id) {
-              tags { name }
+  async function flushStatusQueues() {
+    statusFlushTimer = null;
+    await Promise.all(CARD_TYPES.map(async (type) => {
+      const queue = statusQueues[type];
+      if (!queue.size) return;
+      const entries = [...queue.entries()];
+      queue.clear();
+      const entity = TYPE_ENTITY[type];
+      for (let start = 0; start < entries.length; start += STATUS_BATCH_CHUNK) {
+        const chunk = entries.slice(start, start + STATUS_BATCH_CHUNK);
+        // Map.entries() → [key(id字符串), value(resolve函数)], 取第一个元素即 ID
+        const fields = chunk.map(([idStr], i) => `c${i}: find${entity}(id: "${idStr}") { tags { name } }`).join(' ');
+        let result = await graphqlRequest(`query { ${fields} }`);
+        // 批量查询失败时，降级为逐 ID 单独查询（限并发）
+        if (!result && chunk.length > 1) {
+          console.warn('[FavoriteHeart] 批量查询降级: ' + type + ' x' + chunk.length);
+          // 先发一条探针验证单独查询是否可行
+          const probeKey = `find${entity}`;
+          const probeId = chunk[0][0];  // Map.entries() 第一个元素为 ID 字符串
+          const probe = await graphqlRequest(`query { ${probeKey}(id: "${probeId}") { tags { name } } }`);
+          if (!probe) {
+            // 单独查询同样失败，批量降级无效，全部按无标记处理
+            chunk.forEach(([, resolve]) => resolve({ favorited: false, disliked: false }));
+            continue;
+          }
+          result = { c0: { tags: probe[probeKey]?.tags || [] } };
+          if (chunk.length > 1) {
+            for (let i = 1; i < chunk.length; i += STATUS_FALLBACK_CONCURRENCY) {
+              const slice = chunk.slice(i, i + STATUS_FALLBACK_CONCURRENCY);
+              const partial = await Promise.all(slice.map(async ([idStr], j) => {
+                const single = await graphqlRequest(`query { ${probeKey}(id: "${idStr}") { tags { name } } }`);
+                return [i + j, single?.[probeKey]?.tags || []];
+              }));
+              partial.forEach(([idx, tags]) => { result['c' + idx] = { tags }; });
             }
           }
-        `;
-        break;
-      case 'images':
-        query = `
-          query FindImage($id: ID!) {
-            findImage(id: $id) {
-              tags { name }
-            }
-          }
-        `;
-        break;
-      case 'galleries':
-        query = `
-          query FindGallery($id: ID!) {
-            findGallery(id: $id) {
-              tags { name }
-            }
-          }
-        `;
-        break;
-      default:
-        return false;
-    }
-    const result = await graphqlRequest(query, { id });
-    const tags = result?.[`find${type.slice(0, -1).charAt(0).toUpperCase() + type.slice(1, -1)}`]?.tags || [];
-    return tags.some(tag => tag.name === CONFIG.DISLIKE_TAG_NAME);
+        }
+        chunk.forEach(([, resolve], i) => {
+          const tags = result?.[`c${i}`]?.tags || [];
+          resolve({
+            favorited: tags.some(t => t.name === CONFIG.FAVORITE_TAG_NAME),
+            disliked: tags.some(t => t.name === CONFIG.DISLIKE_TAG_NAME),
+          });
+        });
+      }
+    }));
   }
 
   /**
@@ -733,17 +751,13 @@
     } else if (isInDislikeTagPage()) {
       markDisliked();
     } else {
-      setTimeout(async () => {
-        const [isFavorited, isDisliked] = await Promise.all([
-          checkIfFavorited(cardInfo.type, cardInfo.id),
-          checkIfDisliked(cardInfo.type, cardInfo.id)
-        ]);
-        if (isFavorited) {
+      requestCardStatus(cardInfo.type, cardInfo.id).then(({ favorited, disliked }) => {
+        if (favorited) {
           heartButton.classList.add('favorited');
-        } else if (isDisliked) {
+        } else if (disliked) {
           markDisliked();
         }
-      }, 100);
+      });
     }
     
     heartButton.addEventListener('click', (e) => {
@@ -819,17 +833,13 @@
     } else if (isInDislikeTagPage()) {
       markDisliked();
     } else if (cardInfo) {
-      setTimeout(async () => {
-        const [isFavorited, isDisliked] = await Promise.all([
-          checkIfFavorited(cardInfo.type, cardInfo.id),
-          checkIfDisliked(cardInfo.type, cardInfo.id)
-        ]);
-        if (isFavorited) {
+      requestCardStatus(cardInfo.type, cardInfo.id).then(({ favorited, disliked }) => {
+        if (favorited) {
           heartButton.classList.add('favorited');
-        } else if (isDisliked) {
+        } else if (disliked) {
           markDisliked();
         }
-      }, 100);
+      });
     }
     
     heartButton.addEventListener('click', (e) => handleHeartClick(e, heartButton, card));
@@ -908,8 +918,9 @@
         const processBatch = () => {
           const batch = Array.from(wallImages).slice(index, index + CONFIG.BATCH_SIZE);
           batch.forEach(img => {
-            // 排除网格卡片和瀑布流增强视图中的图片（由 addHeartButton 处理 enhanced-wall-item）
-            if (!img.closest('.scene-card, .image-card, .gallery-card, .enhanced-wall-item')) {
+            // 排除网格卡片、墙视图、瀑布流增强视图和 Flexbin 图库中的图片
+            //（这些容器已由 addHeartButton 处理，再次包装会破坏布局）
+            if (!img.closest('.scene-card, .image-card, .gallery-card, .enhanced-wall-item, .wall-item, .flexbin')) {
               addHeartToWallImage(img);
             }
           });
@@ -952,6 +963,18 @@
     
     // 使用MutationObserver监听DOM变化 - 优化配置减少触发
     const observer = new MutationObserver((mutations) => {
+      // 忽略插件自身插入的按钮/包装容器引起的回调，避免无谓的重复扫描
+      const hasRelevantAdd = mutations.some(m => {
+        for (const node of m.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          if (node.classList.contains('favorite-heart-actions')) continue;
+          if (node.querySelector && node.querySelector('.scene-card, .image-card, .gallery-card, .wall-item, .wall-item-media, .enhanced-wall-item, .power-wall-item, img[src*="thumbnail"]')) return true;
+          if (node.matches && node.matches('.scene-card, .image-card, .gallery-card, .wall-item, .wall-item-media, .enhanced-wall-item, .power-wall-item, img[src*="thumbnail"]')) return true;
+        }
+        return false;
+      });
+      if (!hasRelevantAdd) return;
+      
       // 清除之前的定时器
       if (scanTimeout) {
         clearTimeout(scanTimeout);
