@@ -1,6 +1,6 @@
 /**
  * PowerWall — Stash 原生风格砌墙视图插件
- * @version 1.6.0
+ * @version 1.9.2
  *
  * 砌墙布局：边距(margin)、行距(rowGap)、列距(columnGap)，按行排列、统一行高，
  * 替代自适应瀑布流。支持 /images、/scenes 列表，无限滚动、内置 lightbox、筛选与设置。
@@ -56,6 +56,9 @@
     enableLightbox: true,
     enableOnImages: true,
     enableOnScenes: true,
+    /** 视图模式：'wall'=砌墙 / 'original'=原生列表。按页面类型分别记忆，刷新/换页后保持 */
+    viewModeImages: 'wall',
+    viewModeScenes: 'wall',
     debug: false,
     /** 上次筛选中的排序，用于无 URL 参数时恢复默认 */
     lastSort: 'created_at',
@@ -84,13 +87,19 @@
       return _configCache;
     }
   }
-  function saveConfig(updates) {
+  /**
+   * 合并配置。persist=false 时只更新内存缓存，不写 localStorage —— 供 zoom 滑块 input
+   * 这类高频事件使用（一次拖动会有几十个 input 事件，逐个同步落盘会阻塞主线程）。
+   */
+  function saveConfig(updates, persist = true) {
     const current = getConfig();
     const merged = { ...current, ...updates };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
-    } catch (e) {
-      if (typeof console !== 'undefined' && console.warn) console.warn('[PowerWall] 配置保存失败', e);
+    if (persist) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      } catch (e) {
+        if (typeof console !== 'undefined' && console.warn) console.warn('[PowerWall] 配置保存失败', e);
+      }
     }
     _configCache = merged;
     return merged;
@@ -161,9 +170,33 @@
     return null;
   }
 
+  /** 视图模式记在配置里（按页面类型分开），因此刷新/换页后仍然保持用户的选择 */
+  const VIEW_MODE_KEYS = { images: 'viewModeImages', scenes: 'viewModeScenes' };
+  function getViewMode(pageType) {
+    const key = VIEW_MODE_KEYS[pageType];
+    return key && getConfig()[key] === 'original' ? 'original' : 'wall';
+  }
+  function setViewMode(pageType, mode) {
+    const key = VIEW_MODE_KEYS[pageType];
+    if (!key) return;
+    saveConfig({ [key]: mode === 'original' ? 'original' : 'wall' });
+  }
+
   function parseIdList(val) {
     if (!val || typeof val !== 'string') return [];
     return val.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0);
+  }
+
+  /** 本插件管理的 URL 参数：首页/清除只删这些，避免连带清掉其它插件或 Stash 自身的参数 */
+  const MANAGED_PARAM_KEYS = [
+    'q', 'sortby', 'sortdir', 'page',
+    'tags', 'tag_ids', 'performers', 'performer_ids',
+    'studios', 'studio_ids', 'galleries', 'gallery_ids',
+  ];
+  function buildHomeUrl() {
+    const url = new URL(window.location.href);
+    MANAGED_PARAM_KEYS.forEach((key) => url.searchParams.delete(key));
+    return url.pathname + url.search;
   }
 
   function getFilterFromUrl() {
@@ -342,19 +375,19 @@
             <div class="power-wall-lightbox-infobar-line1"></div>
             <div class="power-wall-lightbox-infobar-line2"></div>
           </div>
-          <button type="button" class="power-wall-lightbox-close" title="关闭 (Esc)">×</button>
+          <button type="button" class="power-wall-lightbox-close" title="关闭 (Esc)" aria-label="关闭">${ICONS.close}</button>
         </div>
         <div class="power-wall-lightbox-toolbar">
-          <button type="button" class="power-wall-lightbox-btn" data-action="zoom-out" title="缩小">−</button>
-          <button type="button" class="power-wall-lightbox-btn" data-action="zoom-in" title="放大">+</button>
+          <button type="button" class="power-wall-lightbox-btn" data-action="zoom-out" title="缩小">${ICONS.minus}</button>
+          <button type="button" class="power-wall-lightbox-btn" data-action="zoom-in" title="放大">${ICONS.plus}</button>
           <button type="button" class="power-wall-lightbox-btn" data-action="toggle-1to1" title="1:1 原图">1:1</button>
         </div>
-        <button type="button" class="power-wall-lightbox-prev" title="上一张">‹</button>
+        <button type="button" class="power-wall-lightbox-prev" title="上一张">${ICONS.chevronLeft}</button>
         <div class="power-wall-lightbox-content">
           <div class="power-wall-lightbox-loading"></div>
           <img class="power-wall-lightbox-img" alt="" draggable="false">
         </div>
-        <button type="button" class="power-wall-lightbox-next" title="下一张">›</button>
+        <button type="button" class="power-wall-lightbox-next" title="下一张">${ICONS.chevronRight}</button>
         <div class="power-wall-lightbox-minimap" aria-hidden="true">
           <div class="power-wall-lightbox-minimap-inner">
             <img class="power-wall-lightbox-minimap-img" alt="">
@@ -826,6 +859,9 @@
       this.hasMore = true;
       this.sentinel = null;
       this.observer = null;
+      // 自动续载预算：一次 IO 触发最多续 3 页，之后必须等新的交叉状态变化，避免异常情况下无限拉取
+      this._resumeStreak = 0;
+      this._resumeTimer = null;
     }
     start(container) {
       if (!container || this.observer) return;
@@ -835,11 +871,13 @@
       container.appendChild(this.sentinel);
       this.observer = new IntersectionObserver(
         (entries) => {
+          // 同一 target 在一个回调里可能投递多条 entry（unobserve/observe 之后很常见，
+          // 且顺序不保证是"过期的在前"）。只看 entries[0] 一旦读到过期的 isIntersecting:false
+          // 就会永久停止加载：此时 observer 已缓存 true，状态不再变化 → 再也不投递回调。
+          if (!entries.some((e) => e.isIntersecting)) return;
+          this._resumeStreak = 0;
           if (this.isLoading || !this.hasMore) return;
-          const e = entries[0];
-          if (e?.isIntersecting) {
-            try { this.loadMore(); } catch (err) { this.isLoading = false; }
-          }
+          this.loadMore().catch(() => {});
         },
         { rootMargin: `${this.threshold}px 0px`, threshold: 0 }
       );
@@ -852,10 +890,33 @@
       }
     }
     stop() {
+      if (this._resumeTimer) { clearTimeout(this._resumeTimer); this._resumeTimer = null; }
       if (this.observer && this.sentinel) this.observer.unobserve(this.sentinel);
       this.observer = null;
       this.sentinel?.remove();
       this.sentinel = null;
+    }
+    /** 哨兵当前是否仍在视口（含 rootMargin）内 —— 实时读取，不依赖 IO 的缓存状态 */
+    _sentinelInRange() {
+      if (!this.sentinel?.isConnected) return false;
+      const r = this.sentinel.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      return r.top <= vh + this.threshold && r.bottom >= -this.threshold;
+    }
+    /**
+     * 兜底自恢复：IntersectionObserver 只在交叉状态"变化"时投递回调。
+     * 若某次加载结束后哨兵仍停留在 rootMargin 内，就没有下一次变化可触发 → 墙静默停住。
+     * 这里在每次加载结束后补一次续载检查（每页最多一次，不是滚动轮询）。
+     */
+    scheduleResumeCheck() {
+      if (this._resumeTimer || !this.hasMore || !this.sentinel) return;
+      this._resumeTimer = setTimeout(() => {
+        this._resumeTimer = null;
+        if (this.isLoading || !this.hasMore || this._resumeStreak >= 3) return;
+        if (!this._sentinelInRange()) return;
+        this._resumeStreak++;
+        this.loadMore().catch(() => {});
+      }, 120);
     }
     async loadMore() {
       if (this.isLoading || !this.hasMore) return;
@@ -866,10 +927,13 @@
       } finally {
         this.isLoading = false;
       }
+      this.scheduleResumeCheck();
     }
     reset() {
       this.isLoading = false;
       this.hasMore = true;
+      this._resumeStreak = 0;
+      if (this._resumeTimer) { clearTimeout(this._resumeTimer); this._resumeTimer = null; }
     }
   }
 
@@ -920,11 +984,94 @@
     }
   }
 
+  // ==================== 内联 SVG 图标（Font Awesome 6 Solid）====================
+  // 与 Stash 顶部导航同一图标集（@fortawesome/free-solid-svg-icons）：实心路径、fill=currentColor、
+  // 按 FA 原始比例缩放。自绘的 24×24 线性图标与原生实心图标视觉重量差距明显，故整体替换。
+  const FA_ICON_PATHS = {
+    'house': [512, 512, 'M277.8 8.6c-12.3-11.4-31.3-11.4-43.5 0l-224 208c-9.6 9-12.8 22.9-8 35.1S18.8 272 32 272l16 0 0 176c0 35.3 28.7 64 64 64l288 0c35.3 0 64-28.7 64-64l0-176 16 0c13.2 0 25-8.1 29.8-20.3s1.6-26.2-8-35.1l-224-208zM240 320l32 0c26.5 0 48 21.5 48 48l0 96-128 0 0-96c0-26.5 21.5-48 48-48z'],
+    'shuffle': [512, 512, 'M403.8 34.4c12-5 25.7-2.2 34.9 6.9l64 64c6 6 9.4 14.1 9.4 22.6s-3.4 16.6-9.4 22.6l-64 64c-9.2 9.2-22.9 11.9-34.9 6.9S384 204.9 384 192l0-32-32 0c-10.1 0-19.6 4.7-25.6 12.8l-32.4 43.2-40-53.3 21.2-28.3C293.3 110.2 321.8 96 352 96l32 0 0-32c0-12.9 7.8-24.6 19.8-29.6zM154 296l40 53.3-21.2 28.3C154.7 401.8 126.2 416 96 416l-64 0c-17.7 0-32-14.3-32-32s14.3-32 32-32l64 0c10.1 0 19.6-4.7 25.6-12.8L154 296zM438.6 470.6c-9.2 9.2-22.9 11.9-34.9 6.9S384 460.9 384 448l0-32-32 0c-30.2 0-58.7-14.2-76.8-38.4L121.6 172.8c-6-8.1-15.5-12.8-25.6-12.8l-64 0c-17.7 0-32-14.3-32-32S14.3 96 32 96l64 0c30.2 0 58.7 14.2 76.8 38.4L326.4 339.2c6 8.1 15.5 12.8 25.6 12.8l32 0 0-32c0-12.9 7.8-24.6 19.8-29.6s25.7-2.2 34.9 6.9l64 64c6 6 9.4 14.1 9.4 22.6s-3.4 16.6-9.4 22.6l-64 64z'],
+    'book-open': [512, 512, 'M256 141.3l0 309.3 .5-.2C311.1 427.7 369.7 416 428.8 416l19.2 0 0-320-19.2 0c-42.2 0-84.1 8.4-123.1 24.6-16.8 7-33.4 13.9-49.7 20.7zM230.9 61.5L256 72 281.1 61.5C327.9 42 378.1 32 428.8 32L464 32c26.5 0 48 21.5 48 48l0 352c0 26.5-21.5 48-48 48l-35.2 0c-50.7 0-100.9 10-147.7 29.5l-12.8 5.3c-7.9 3.3-16.7 3.3-24.6 0l-12.8-5.3C184.1 490 133.9 480 83.2 480L48 480c-26.5 0-48-21.5-48-48L0 80C0 53.5 21.5 32 48 32l35.2 0c50.7 0 100.9 10 147.7 29.5z'],
+    'arrow-up': [384, 512, 'M214.6 17.4c-12.5-12.5-32.8-12.5-45.3 0l-160 160c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L160 117.3 160 488c0 17.7 14.3 32 32 32s32-14.3 32-32l0-370.7 105.4 105.4c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3l-160-160z'],
+    'arrow-down': [384, 512, 'M169.4 502.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 402.7 224 32c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 370.7-105.4-105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z'],
+    'filter': [512, 512, 'M32 64C19.1 64 7.4 71.8 2.4 83.8S.2 109.5 9.4 118.6L192 301.3 192 416c0 8.5 3.4 16.6 9.4 22.6l64 64c9.2 9.2 22.9 11.9 34.9 6.9S320 492.9 320 480l0-178.7 182.6-182.6c9.2-9.2 11.9-22.9 6.9-34.9S492.9 64 480 64L32 64z'],
+    'sliders': [512, 512, 'M32 64C14.3 64 0 78.3 0 96s14.3 32 32 32l86.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 128c17.7 0 32-14.3 32-32s-14.3-32-32-32L265.3 64C253 35.7 224.8 16 192 16s-61 19.7-73.3 48L32 64zm0 160c-17.7 0-32 14.3-32 32s14.3 32 32 32l246.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48l54.7 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-54.7 0c-12.3-28.3-40.5-48-73.3-48s-61 19.7-73.3 48L32 224zm0 160c-17.7 0-32 14.3-32 32s14.3 32 32 32l54.7 0c12.3 28.3 40.5 48 73.3 48s61-19.7 73.3-48L480 448c17.7 0 32-14.3 32-32s-14.3-32-32-32l-246.7 0c-12.3-28.3-40.5-48-73.3-48s-61 19.7-73.3 48L32 384z'],
+    'rotate-right': [512, 512, 'M488 192l-144 0c-9.7 0-18.5-5.8-22.2-14.8s-1.7-19.3 5.2-26.2l46.7-46.7c-75.3-58.6-184.3-53.3-253.5 15.9-75 75-75 196.5 0 271.5s196.5 75 271.5 0c8.2-8.2 15.5-16.9 21.9-26.1 10.1-14.5 30.1-18 44.6-7.9s18 30.1 7.9 44.6c-8.5 12.2-18.2 23.8-29.1 34.7-100 100-262.1 100-362 0S-25 175 75 75c94.3-94.3 243.7-99.6 344.3-16.2L471 7c6.9-6.9 17.2-8.9 26.2-5.2S512 14.3 512 24l0 144c0 13.3-10.7 24-24 24z'],
+    'rotate-left': [512, 512, 'M24 192l144 0c9.7 0 18.5-5.8 22.2-14.8s1.7-19.3-5.2-26.2l-46.7-46.7c75.3-58.6 184.3-53.3 253.5 15.9 75 75 75 196.5 0 271.5s-196.5 75-271.5 0c-10.2-10.2-19-21.3-26.4-33-9.5-14.9-29.3-19.3-44.2-9.8s-19.3 29.3-9.8 44.2C49.7 408.7 61.4 423.5 75 437 175 537 337 537 437 437S537 175 437 75C342.8-19.3 193.3-24.7 92.7 58.8L41 7C34.1 .2 23.8-1.9 14.8 1.8S0 14.3 0 24L0 168c0 13.3 10.7 24 24 24z'],
+    'list': [512, 512, 'M40 48C26.7 48 16 58.7 16 72l0 48c0 13.3 10.7 24 24 24l48 0c13.3 0 24-10.7 24-24l0-48c0-13.3-10.7-24-24-24L40 48zM192 64c-17.7 0-32 14.3-32 32s14.3 32 32 32l288 0c17.7 0 32-14.3 32-32s-14.3-32-32-32L192 64zm0 160c-17.7 0-32 14.3-32 32s14.3 32 32 32l288 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-288 0zm0 160c-17.7 0-32 14.3-32 32s14.3 32 32 32l288 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-288 0zM16 232l0 48c0 13.3 10.7 24 24 24l48 0c13.3 0 24-10.7 24-24l0-48c0-13.3-10.7-24-24-24l-48 0c-13.3 0-24 10.7-24 24zM40 368c-13.3 0-24 10.7-24 24l0 48c0 13.3 10.7 24 24 24l48 0c13.3 0 24-10.7 24-24l0-48c0-13.3-10.7-24-24-24l-48 0z'],
+    'table-cells-large': [448, 512, 'M384 96l-128 0 0 128 128 0 0-128zm64 128l0 192c0 35.3-28.7 64-64 64L64 480c-35.3 0-64-28.7-64-64L0 96C0 60.7 28.7 32 64 32l320 0c35.3 0 64 28.7 64 64l0 128zM64 288l0 128 128 0 0-128-128 0zm128-64l0-128-128 0 0 128 128 0zm64 64l0 128 128 0 0-128-128 0z'],
+    'xmark': [384, 512, 'M55.1 73.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L147.2 256 9.9 393.4c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L192.5 301.3 329.9 438.6c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.8 256 375.1 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192.5 210.7 55.1 73.4z'],
+    'check': [448, 512, 'M434.8 70.1c14.3 10.4 17.5 30.4 7.1 44.7l-256 352c-5.5 7.6-14 12.3-23.4 13.1s-18.5-2.7-25.1-9.3l-128-128c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l101.5 101.5 234-321.7c10.4-14.3 30.4-17.5 44.7-7.1z'],
+    'circle-check': [512, 512, 'M256 512a256 256 0 1 1 0-512 256 256 0 1 1 0 512zM374 145.7c-10.7-7.8-25.7-5.4-33.5 5.3L221.1 315.2 169 263.1c-9.4-9.4-24.6-9.4-33.9 0s-9.4 24.6 0 33.9l72 72c5 5 11.8 7.5 18.8 7s13.4-4.1 17.5-9.8L379.3 179.2c7.8-10.7 5.4-25.7-5.3-33.5z'],
+    'triangle-exclamation': [512, 512, 'M256 0c14.7 0 28.2 8.1 35.2 21l216 400c6.7 12.4 6.4 27.4-.8 39.5S486.1 480 472 480L40 480c-14.1 0-27.2-7.4-34.4-19.5s-7.5-27.1-.8-39.5l216-400c7-12.9 20.5-21 35.2-21zm0 352a32 32 0 1 0 0 64 32 32 0 1 0 0-64zm0-192c-18.2 0-32.7 15.5-31.4 33.7l7.4 104c.9 12.5 11.4 22.3 23.9 22.3 12.6 0 23-9.7 23.9-22.3l7.4-104c1.3-18.2-13.1-33.7-31.4-33.7z'],
+    'chevron-down': [448, 512, 'M201.4 406.6c12.5 12.5 32.8 12.5 45.3 0l192-192c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 338.7 54.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l192 192z'],
+    'star': [576, 512, 'M309.5-18.9c-4.1-8-12.4-13.1-21.4-13.1s-17.3 5.1-21.4 13.1L193.1 125.3 33.2 150.7c-8.9 1.4-16.3 7.7-19.1 16.3s-.5 18 5.8 24.4l114.4 114.5-25.2 159.9c-1.4 8.9 2.3 17.9 9.6 23.2s16.9 6.1 25 2L288.1 417.6 432.4 491c8 4.1 17.7 3.3 25-2s11-14.2 9.6-23.2L441.7 305.9 556.1 191.4c6.4-6.4 8.6-15.8 5.8-24.4s-10.1-14.9-19.1-16.3L383 125.3 309.5-18.9z'],
+    'eye': [576, 512, 'M288 32c-80.8 0-145.5 36.8-192.6 80.6-46.8 43.5-78.1 95.4-93 131.1-3.3 7.9-3.3 16.7 0 24.6 14.9 35.7 46.2 87.7 93 131.1 47.1 43.7 111.8 80.6 192.6 80.6s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1 3.3-7.9 3.3-16.7 0-24.6-14.9-35.7-46.2-87.7-93-131.1-47.1-43.7-111.8-80.6-192.6-80.6zM144 256a144 144 0 1 1 288 0 144 144 0 1 1 -288 0zm144-64c0 35.3-28.7 64-64 64-11.5 0-22.3-3-31.7-8.4-1 10.9-.1 22.1 2.9 33.2 13.7 51.2 66.4 81.6 117.6 67.9s81.6-66.4 67.9-117.6c-12.2-45.7-55.5-74.8-101.1-70.8 5.3 9.3 8.4 20.1 8.4 31.7z'],
+    'user': [448, 512, 'M224 248a120 120 0 1 0 0-240 120 120 0 1 0 0 240zm-29.7 56C95.8 304 16 383.8 16 482.3 16 498.7 29.3 512 45.7 512l356.6 0c16.4 0 29.7-13.3 29.7-29.7 0-98.5-79.8-178.3-178.3-178.3l-59.4 0z'],
+    'building': [384, 512, 'M64 0C28.7 0 0 28.7 0 64L0 448c0 35.3 28.7 64 64 64l256 0c35.3 0 64-28.7 64-64l0-384c0-35.3-28.7-64-64-64L64 0zM176 352l32 0c17.7 0 32 14.3 32 32l0 80-96 0 0-80c0-17.7 14.3-32 32-32zM96 112c0-8.8 7.2-16 16-16l32 0c8.8 0 16 7.2 16 16l0 32c0 8.8-7.2 16-16 16l-32 0c-8.8 0-16-7.2-16-16l0-32zM240 96l32 0c8.8 0 16 7.2 16 16l0 32c0 8.8-7.2 16-16 16l-32 0c-8.8 0-16-7.2-16-16l0-32c0-8.8 7.2-16 16-16zM96 240c0-8.8 7.2-16 16-16l32 0c8.8 0 16 7.2 16 16l0 32c0 8.8-7.2 16-16 16l-32 0c-8.8 0-16-7.2-16-16l0-32zm144-16l32 0c8.8 0 16 7.2 16 16l0 32c0 8.8-7.2 16-16 16l-32 0c-8.8 0-16-7.2-16-16l0-32c0-8.8 7.2-16 16-16z'],
+    'minus': [448, 512, 'M0 256c0-17.7 14.3-32 32-32l384 0c17.7 0 32 14.3 32 32s-14.3 32-32 32L32 288c-17.7 0-32-14.3-32-32z'],
+    'plus': [448, 512, 'M256 64c0-17.7-14.3-32-32-32s-32 14.3-32 32l0 160-160 0c-17.7 0-32 14.3-32 32s14.3 32 32 32l160 0 0 160c0 17.7 14.3 32 32 32s32-14.3 32-32l0-160 160 0c17.7 0 32-14.3 32-32s-14.3-32-32-32l-160 0 0-160z'],
+    'chevron-left': [320, 512, 'M9.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l192 192c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L77.3 256 246.6 86.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-192 192z'],
+    'chevron-right': [320, 512, 'M311.1 233.4c12.5 12.5 12.5 32.8 0 45.3l-192 192c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L243.2 256 73.9 86.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l192 192z'],
+  };
+
+  /**
+   * 生成 FA Solid 内联 SVG。size 为高度（px），宽度按 FA 原始比例换算，
+   * 与 Stash 的 .fa-icon 排版一致（非正方形图标不会被拉宽）。
+   */
+  function faIcon(name, size = 16) {
+    const data = FA_ICON_PATHS[name];
+    if (!data) return '';
+    const [w, h, d] = data;
+    const width = Math.round((size * w / h) * 100) / 100;
+    return `<svg viewBox="0 0 ${w} ${h}" width="${width}" height="${size}" fill="currentColor" aria-hidden="true" focusable="false"><path d="${d}"/></svg>`;
+  }
+
+  const ICONS = {
+    /** 首页：清除筛选/随机，回到默认视图 */
+    home: faIcon('house'),
+    /** 随览：随机 */
+    shuffle: faIcon('shuffle'),
+    /** 随阅：随机图库 */
+    bookOpen: faIcon('book-open'),
+    arrowUp: faIcon('arrow-up'),
+    arrowDown: faIcon('arrow-down'),
+    /** 筛选：漏斗 */
+    filter: faIcon('filter'),
+    /** 设置：滑杆 */
+    sliders: faIcon('sliders'),
+    refresh: faIcon('rotate-right'),
+    /** 原始视图：回到原生列表 */
+    layoutList: faIcon('list'),
+    /** 墙视图：砌墙（原始视图下的返回入口） */
+    layoutGrid: faIcon('table-cells-large'),
+    checkCircle: faIcon('circle-check'),
+    alert: faIcon('triangle-exclamation'),
+    /** 面板通用：关闭 / 确认 / 复位 / 折叠 / 缩放 / 翻页 */
+    close: faIcon('xmark'),
+    check: faIcon('check'),
+    rotateCcw: faIcon('rotate-left'),
+    chevronDown: faIcon('chevron-down'),
+    minus: faIcon('minus'),
+    plus: faIcon('plus'),
+    chevronLeft: faIcon('chevron-left'),
+    chevronRight: faIcon('chevron-right'),
+  };
+
+  // 卡片 meta 行的小图标：12px 起步，节点数刻意压到 1–2 个（每张卡片可能渲染 1–4 个，
+  // 直接按大图标那样堆节点会明显推高整墙 DOM 量）
+  const META_ICONS = {
+    star: faIcon('star', 12),
+    eye: faIcon('eye', 12),
+    user: faIcon('user', 12),
+    building: faIcon('building', 12),
+  };
+
   // ==================== 主类 PowerWall ====================
   class PowerWall {
     constructor() {
       this.container = null;
       this.wallContainer = null;
+      this.toolbarEl = null;
       this.brickWall = null;
       this.scroller = null;
       this.videoPreview = null;
@@ -936,13 +1083,13 @@
       this.isEnabled = false;
       this.loadingIndicator = null;
       this.resizeHandler = null;
-      // 用于“分块逐步渲染”的滚动速度采样（px/s）
-      this._scrollSpeedPxPerSec = 0;
-      this._scrollSpeedLastY = 0;
-      this._scrollSpeedLastT = 0;
-      this._boundScrollSpeedTracker = null;
       // 标题排序方向（'ASC'/'DESC'，null=未启用；不持久化，刷新/随览/随阅/切换路由时自动释放）
       this.titleSortDir = null;
+      // 代际令牌：disable/refresh 时递增，使残留的异步加载循环（loadMore/addItemsBatch）失配退出，
+      // 避免旧批次继续追加导致同一图片重复上墙（abortController 被替换后 signal 检查会失效）
+      this.generation = 0;
+      // 跨批次去重：记录本墙实例已渲染的 data.id，绝对杜绝同 id 重复上墙（终极防线）
+      this.addedDataIds = new Set();
     }
 
     async init() {
@@ -988,7 +1135,9 @@
       this.resizeHandler = debounce(() => {
         if (!this.isEnabled || !this.brickWall || !this.wallContainer?.isConnected) return;
         requestAnimationFrame(() => {
-          if (this.isEnabled && this.brickWall && this.wallContainer?.isConnected) this.brickWall.relayout();
+          if (!this.isEnabled || !this.brickWall || !this.wallContainer?.isConnected) return;
+          this.updateFixedToolbar();
+          this.brickWall.relayout();
         });
       }, 150);
       window.addEventListener('resize', this.resizeHandler);
@@ -999,6 +1148,9 @@
           this.resizeObserver.observe(this.wallContainer.parentElement || this.wallContainer);
         }
         if (this.regionElement) this.resizeObserver.observe(this.regionElement);
+        // 系统顶栏高度变化（响应式/字体加载）时重新贴合
+        const topNav = document.querySelector('.top-nav');
+        if (topNav) this.resizeObserver.observe(topNav);
         this.resizeObserver.observe(document.documentElement);
       }
       this._lastScrollbarW = getScrollbarWidth();
@@ -1010,12 +1162,6 @@
           this.resizeHandler();
         }
       }, 500);
-      // 采样滚动速度：用于动态决定每批渲染大小，避免高速度下一次性重排掉帧
-      this._scrollSpeedLastY = window.scrollY || document.documentElement.scrollTop || 0;
-      this._scrollSpeedLastT = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      this._scrollSpeedPxPerSec = 0;
-      this._boundScrollSpeedTracker = () => { this.recordScrollSpeed(); };
-      window.addEventListener('scroll', this._boundScrollSpeedTracker, { passive: true });
       this.createBackToTopButton();
     }
 
@@ -1054,14 +1200,23 @@
       }
     }
 
+    /**
+     * 切到「原始」视图：记住该选择（刷新/换页后保持），卸载砌墙并挂上唯一的返回入口
+     * （右下角「墙视图」按钮）。不持久化的话用户的选择会被刷新/换页直接覆盖。
+     */
+    switchToOriginalView() {
+      const pageType = this.pageType;
+      if (!pageType) return;
+      setViewMode(pageType, 'original');
+      this.disable();
+      mountSwitchToWallButton(pageType);
+    }
+
     disable() {
       if (!this.isEnabled) return;
       this.isEnabled = false;
+      this.generation++;
       this.destroyBackToTopButton();
-      if (this._boundScrollSpeedTracker) {
-        window.removeEventListener('scroll', this._boundScrollSpeedTracker);
-        this._boundScrollSpeedTracker = null;
-      }
       if (this.abortController) { this.abortController.abort(); this.abortController = null; }
       document.body.classList.remove('power-wall-active');
       document.documentElement.classList.remove('power-wall-preload');
@@ -1073,52 +1228,13 @@
       if (this.resizeObserver) { this.resizeObserver.disconnect(); this.resizeObserver = null; }
       const mountEl = this.container?.closest?.('.power-wall-mount');
       if (mountEl) mountEl.classList.remove('power-wall-mount');
+      if (this.toolbarEl) { this.toolbarEl.remove(); this.toolbarEl = null; }
       if (this.regionElement) { this.regionElement.classList.remove('power-wall-region'); this.regionElement = null; }
       if (this.container) { this.container.remove(); this.container = null; this.wallContainer = null; }
       this.brickWall = null;
       this.items = [];
+      this.addedDataIds.clear();
       this.page = 1;
-    }
-
-    recordScrollSpeed() {
-      if (!this.isEnabled) return;
-      const y = window.scrollY || document.documentElement.scrollTop || 0;
-      const t = (typeof performance !== 'undefined' ? performance.now() : Date.now());
-      const lastT = this._scrollSpeedLastT;
-      const lastY = this._scrollSpeedLastY;
-
-      if (!lastT) {
-        this._scrollSpeedLastT = t;
-        this._scrollSpeedLastY = y;
-        return;
-      }
-      const dt = t - lastT;
-      if (dt < 16) return; // 降噪：过于频繁的采样会让速度抖动
-      const dy = y - lastY;
-      const speed = Math.abs(dy) / dt * 1000; // px/s
-      // 指数滑动平均，降低抖动
-      this._scrollSpeedPxPerSec = this._scrollSpeedPxPerSec
-        ? this._scrollSpeedPxPerSec * 0.7 + speed * 0.3
-        : speed;
-
-      this._scrollSpeedLastT = t;
-      this._scrollSpeedLastY = y;
-    }
-
-    getProgressiveChunkSize(remaining, itemsPerPage) {
-      const v = this._scrollSpeedPxPerSec || 0;
-      let size;
-      // 滚动越快 -> 每批越小（降低单次 DOM/重排成本）
-      if (v > 3500) size = 5;
-      else if (v > 2000) size = 8;
-      else if (v > 1100) size = 12;
-      else size = 16;
-
-      // 也不超过配置允许的上限
-      const maxFromConfig = Math.max(4, Math.floor(itemsPerPage / 2));
-      size = Math.min(size, maxFromConfig);
-      size = Math.max(3, size);
-      return Math.min(remaining, size);
     }
 
     waitNextFrame() {
@@ -1155,29 +1271,12 @@
         document.body
       ].find(c => c);
       if (!targetContainer) { error('找不到容器'); return; }
+
+      // 防御性清理：移除此前可能残留的 .power-wall-container（避免双重初始化遗留）
+      targetContainer.querySelectorAll('.power-wall-container').forEach(el => el.remove());
       this.container = document.createElement('div');
       this.container.className = 'power-wall-container' + (getConfig().layoutPreset === 'seamless' ? ' power-wall-seamless' : '');
-      const cfg = getConfig();
-      const zoomMax = ZOOM_WIDTHS.length - 1;
       this.container.innerHTML = `
-        <div class="power-wall-toolbar">
-          <div class="power-wall-toolbar-left">
-            <span class="power-wall-count">加载中...</span>
-          </div>
-          <div class="power-wall-toolbar-zoom">
-            <input type="range" class="power-wall-zoom-slider" id="pw-zoom-slider" min="0" max="${zoomMax}" value="${Math.min(cfg.zoomIndex, zoomMax)}" title="缩放">
-          </div>
-          <div class="power-wall-toggle">
-            <button type="button" class="power-wall-toggle-btn" data-action="random" title="随机浏览"><span class="pw-btn-icon">🎲</span><span class="pw-btn-text">随览</span></button>
-            ${this.pageType === 'images' ? '<button type="button" class="power-wall-toggle-btn" data-action="randomGallery" title="随机打开一个图库"><span class="pw-btn-icon">📖</span><span class="pw-btn-text">随阅</span></button>' : ''}
-            <button type="button" class="power-wall-toggle-btn" data-action="titleAsc" title="按文件名升序（前导零分组 + 数值）"><span class="pw-btn-icon">⬆</span><span class="pw-btn-text">升序</span></button>
-            <button type="button" class="power-wall-toggle-btn" data-action="titleDesc" title="按文件名降序（前导零分组 + 数值）"><span class="pw-btn-icon">⬇</span><span class="pw-btn-text">降序</span></button>
-            <button type="button" class="power-wall-toggle-btn" data-action="filter" title="筛选"><span class="pw-btn-icon">🔍</span><span class="pw-btn-text">筛选</span></button>
-            <button type="button" class="power-wall-toggle-btn" data-action="settings" title="设置"><span class="pw-btn-icon">⚙️</span><span class="pw-btn-text">设置</span></button>
-            <button type="button" class="power-wall-toggle-btn" data-action="refresh" title="刷新"><span class="pw-btn-icon">🔄</span><span class="pw-btn-text">刷新</span></button>
-            <button type="button" class="power-wall-toggle-btn" data-action="original" title="原始视图"><span class="pw-btn-icon">📋</span><span class="pw-btn-text">原始</span></button>
-          </div>
-        </div>
         <div class="power-wall-masonry"></div>
         <div class="power-wall-loading">
           <div class="power-wall-loading-spinner"></div>
@@ -1190,41 +1289,119 @@
       else targetContainer.insertBefore(this.container, targetContainer.firstChild);
       this.regionElement = targetContainer;
       targetContainer.classList.add('power-wall-region');
+      // 工具栏独立挂到 body，固定悬浮于系统顶栏下方（见 createToolbar）
+      this.createToolbar();
+      // 首屏就点亮正确的模式按钮（不等第一页加载完），避免"三个都不亮"的闪烁
+      this.updateModeButtons();
+    }
 
-      const slider = this.container.querySelector('#pw-zoom-slider');
+    /**
+     * 创建悬浮工具栏。
+     * 挂到 body 而不是 .power-wall-container 内：容器自身有 opacity 过场，祖先节点
+     * 也可能带 transform/filter —— 这些都会让 position:fixed 改变参照系，导致工具栏
+     * 跟随内容滚动或被裁切。挂到 body 才能稳定贴住视口顶部，并与系统顶栏同层（z-index:1030）。
+     */
+    createToolbar() {
+      const cfg = getConfig();
+      const zoomMax = ZOOM_WIDTHS.length - 1;
+      // 防御性清理：移除此前可能残留的工具栏（避免双重初始化遗留）
+      document.querySelectorAll('.power-wall-toolbar').forEach(el => el.remove());
+      const toolbar = document.createElement('div');
+      toolbar.className = 'power-wall-toolbar';
+      toolbar.innerHTML = `
+        <div class="power-wall-toolbar-left">
+          <span class="power-wall-count">加载中...</span>
+        </div>
+        <div class="power-wall-toolbar-zoom">
+          <input type="range" class="power-wall-zoom-slider" id="pw-zoom-slider" min="0" max="${zoomMax}" value="${Math.min(cfg.zoomIndex, zoomMax)}" title="缩放">
+        </div>
+        <div class="power-wall-toggle">
+          <button type="button" class="power-wall-toggle-btn" data-action="home" title="回到首页（清除筛选与随机）" aria-label="回到首页" aria-pressed="false"><span class="pw-btn-icon">${ICONS.home}</span><span class="pw-btn-text">首页</span></button>
+          <button type="button" class="power-wall-toggle-btn" data-action="random" title="随机浏览" aria-label="随览"><span class="pw-btn-icon">${ICONS.shuffle}</span><span class="pw-btn-text">随览</span></button>
+          ${this.pageType === 'images' ? `<button type="button" class="power-wall-toggle-btn" data-action="randomGallery" title="随机打开一个图库" aria-label="随阅"><span class="pw-btn-icon">${ICONS.bookOpen}</span><span class="pw-btn-text">随阅</span></button>` : ''}
+          <button type="button" class="power-wall-toggle-btn" data-action="titleAsc" title="按文件名升序（前导零分组 + 数值）" aria-label="按文件名升序" aria-pressed="false"><span class="pw-btn-icon">${ICONS.arrowUp}</span><span class="pw-btn-text">升序</span></button>
+          <button type="button" class="power-wall-toggle-btn" data-action="titleDesc" title="按文件名降序（前导零分组 + 数值）" aria-label="按文件名降序" aria-pressed="false"><span class="pw-btn-icon">${ICONS.arrowDown}</span><span class="pw-btn-text">降序</span></button>
+          <button type="button" class="power-wall-toggle-btn" data-action="filter" title="筛选" aria-label="筛选"><span class="pw-btn-icon">${ICONS.filter}</span><span class="pw-btn-text">筛选</span></button>
+          <button type="button" class="power-wall-toggle-btn" data-action="settings" title="设置" aria-label="设置"><span class="pw-btn-icon">${ICONS.sliders}</span><span class="pw-btn-text">设置</span></button>
+          <button type="button" class="power-wall-toggle-btn" data-action="refresh" title="刷新" aria-label="刷新"><span class="pw-btn-icon">${ICONS.refresh}</span><span class="pw-btn-text">刷新</span></button>
+          <button type="button" class="power-wall-toggle-btn" data-action="original" title="原始视图" aria-label="原始视图"><span class="pw-btn-icon">${ICONS.layoutList}</span><span class="pw-btn-text">原始</span></button>
+        </div>
+      `;
+      // 必须挂到 body：fixed 元素若留在容器内，会受容器 opacity/祖先 transform 影响。
+      // 放在 #root 之前（同为 z-index:1030，后出现的原生顶栏优先绘制）：
+      // 这样系统顶栏的下拉菜单展开时可正常盖在工具栏之上，不会被工具栏压住。
+      document.body.insertBefore(toolbar, document.body.firstChild);
+      this.toolbarEl = toolbar;
+      this.updateFixedToolbar();
+
+      const slider = toolbar.querySelector('#pw-zoom-slider');
       if (slider) {
-        slider.addEventListener('input', () => {
-          const v = parseInt(slider.value, 10);
-          saveConfig({ zoomIndex: v });
+        // range 的 input 按指针采样率触发（>60Hz）。原实现每个事件都同步写 localStorage + 全量重排，
+        // 实测 400 项时 40 个事件会阻塞主线程约 1s。
+        // 现在：input 只更新内存配置 + rAF 合并后重排一次；change（松手）时才落盘一次。
+        let zoomRaf = 0;
+        let pendingZoom = null;
+        const flushZoom = () => {
+          if (pendingZoom === null || !this.isEnabled) return;
+          const v = pendingZoom;
+          pendingZoom = null;
+          if (getConfig().zoomIndex !== v) saveConfig({ zoomIndex: v }, false);
           this.brickWall?.relayout();
+        };
+        slider.addEventListener('input', () => {
+          pendingZoom = parseInt(slider.value, 10);
+          if (!zoomRaf) zoomRaf = requestAnimationFrame(() => { zoomRaf = 0; flushZoom(); });
+        });
+        slider.addEventListener('change', () => {
+          pendingZoom = parseInt(slider.value, 10);
+          if (zoomRaf) { cancelAnimationFrame(zoomRaf); zoomRaf = 0; }
+          flushZoom();
+          saveConfig({ zoomIndex: parseInt(slider.value, 10) });   // 落盘一次
         });
       }
-      this.container.querySelector('.power-wall-toolbar').addEventListener('click', (e) => {
+      toolbar.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
         if (!btn) return;
         const action = btn.dataset.action;
         if (action === 'settings') this.openSettingsPanel();
         else if (action === 'filter') this.openFilterPanel();
+        else if (action === 'home') this.goHome();
         else if (action === 'refresh') this.refresh();
         else if (action === 'random') this.loadRandom();
         else if (action === 'randomGallery') this.loadRandomGallery();
         else if (action === 'titleAsc') this.setTitleSort('ASC');
         else if (action === 'titleDesc') this.setTitleSort('DESC');
-        else if (action === 'original') this.disable();
+        else if (action === 'original') this.switchToOriginalView();
       });
+    }
+
+    /**
+     * 悬浮工具栏贴合系统顶部导航下沿：高度与导航一致、z-index 同为 1030，
+     * 滚动时位置不变。固定定位脱离文档流，因此在容器顶部预留同等高度，
+     * 避免工具栏遮住第一行图片。
+     */
+    updateFixedToolbar() {
+      if (!this.toolbarEl || !this.container) return;
+      const nav = document.querySelector('.top-nav');
+      const navHeight = nav ? nav.getBoundingClientRect().height : 0;
+      const height = navHeight > 0 ? navHeight : 48.75;
+      this.toolbarEl.style.top = navHeight > 0 ? `${navHeight}px` : '0px';
+      this.toolbarEl.style.height = `${height}px`;
+      this.container.style.setProperty('--pw-toolbar-space', `${height}px`);
     }
 
     async loadMore() {
       if (!this.isEnabled || !this.scroller || !this.scroller.hasMore || !this.wallContainer) return;
+      const gen = this.generation;
       this.showLoading(true);
       try {
         const data = await this.fetchData();
-        if (!this.isEnabled || !this.wallContainer) return;
+        if (!this.isEnabled || !this.wallContainer || gen !== this.generation) return;
         if (data?.items?.length > 0) {
           this.totalCount = data.count;
           this.updateCount();
-          await this.addItemsBatch(data.items);
-          if (!this.isEnabled || !this.wallContainer || !this.scroller) return;
+          await this.addItemsBatch(data.items, gen);
+          if (!this.isEnabled || !this.wallContainer || !this.scroller || gen !== this.generation) return;
           this.page++;
           this.scroller.hasMore = this.items.length < this.totalCount;
         } else {
@@ -1235,11 +1412,14 @@
         error('加载失败:', err);
         this.showError();
       } finally {
-        this.showLoading(false);
-        if (!this.container?.classList.contains('power-wall-ready')) {
-          requestAnimationFrame(() => {
-            this.container?.classList.add('power-wall-ready');
-          });
+        if (gen === this.generation) {
+          this.showLoading(false);
+          this.updateModeButtons();
+          if (!this.container?.classList.contains('power-wall-ready')) {
+            requestAnimationFrame(() => {
+              this.container?.classList.add('power-wall-ready');
+            });
+          }
         }
       }
     }
@@ -1260,29 +1440,64 @@
       return fileBase || data?.title || `#${data?.id ?? ''}`;
     }
 
-    /** 对已加载项按标题重排：同步重排 items 与 brickWall 平行数组，并同步 DOM 顺序 */
+    /** 对已加载项按标题重排：使用 id 匹配代替索引 zipper，避免因竞态导致 this.items 与 brickWall.items 长度不同步时残影/重复 */
     applyTitleSort() {
       if (!this.titleSortDir || !this.brickWall || !this.items.length) return;
       const dir = this.titleSortDir;
-      const combined = this.items.map((entry, i) => ({ entry, wallItem: this.brickWall.items[i] }));
+
+      // 以 data.id 建立 brickWall.item 映射，消除索引失配风险
+      const wallItemMap = new Map();
+      this.brickWall.items.forEach(wi => {
+        const el = wi.element;
+        const dataId = el?.dataset?.id || el?.querySelector?.('.power-wall-link')?.dataset?.id || '';
+        if (dataId) wallItemMap.set(String(dataId), wi);
+      });
+
+      // 对齐：仅保留同时存在于两边的项（data 有对应 wallItem），避免孤儿。
+      // seenDataIds 防止 this.items 中出现同 dataId 导致 brickWall.items 重复元素引用
+      const combined = [];
+      const seenDataIds = new Set();
+      for (const entry of this.items) {
+        const dataId = String(entry.data?.id ?? '');
+        if (seenDataIds.has(dataId)) continue;
+        seenDataIds.add(dataId);
+        const wi = wallItemMap.get(dataId);
+        if (wi) combined.push({ entry, wallItem: wi });
+      }
       combined.sort((a, b) => compareByTitle(
         this.getItemSortTitle(a.entry.data),
         this.getItemSortTitle(b.entry.data),
         dir
       ));
       this.items = combined.map(c => c.entry);
-      this.brickWall.items = combined.map(c => c.wallItem).filter(Boolean);
+      this.brickWall.items = combined.map(c => c.wallItem);
+
+      // 把已不归属于此的孤儿元素清理出 DOM（防止留在砌墙容器内产生视觉重复）
+      const keep = new Set(this.brickWall.items.map(wi => wi.element));
+      const toRemove = [];
+      for (let i = this.wallContainer.children.length - 1; i >= 0; i--) {
+        const child = this.wallContainer.children[i];
+        if (child.classList.contains('power-wall-item') && !keep.has(child)) {
+          toRemove.push(child);
+        }
+      }
+      toRemove.forEach(el => el.remove());
+
       const fragment = document.createDocumentFragment();
       this.brickWall.items.forEach(wi => fragment.appendChild(wi.element));
       this.wallContainer.appendChild(fragment);
       this.brickWall.forceFullRelayout();
+      // 排序重排后 sentinel 在 DOM 树位置可能偏移，重新 observer 保证滚动加载正确触发
+      this.scroller?.updateSentinel();
     }
 
     updateTitleSortButtons() {
-      this.container?.querySelectorAll('[data-action="titleAsc"], [data-action="titleDesc"]').forEach(btn => {
+      const root = this.toolbarEl || this.container;
+      root?.querySelectorAll('[data-action="titleAsc"], [data-action="titleDesc"]').forEach(btn => {
         const active = (btn.dataset.action === 'titleAsc' && this.titleSortDir === 'ASC')
           || (btn.dataset.action === 'titleDesc' && this.titleSortDir === 'DESC');
         btn.classList.toggle('power-wall-toggle-btn-active', active);
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
       });
     }
 
@@ -1333,7 +1548,7 @@
       return { count: data.count, items: data[this.pageType] || [] };
     }
 
-    async addItemsBatch(itemsData) {
+    async addItemsBatch(itemsData, gen) {
       if (!this.wallContainer || !itemsData?.length) return;
       const cfg = getConfig();
       this.brickWall.margin = cfg.margin;
@@ -1341,23 +1556,30 @@
       this.brickWall.columnGap = cfg.columnGap;
 
       const useLightbox = cfg.enableLightbox !== false;
-      const itemsPerPage = cfg.itemsPerPage || itemsData.length;
 
-      // 分块逐步插入 + 分块重排，避免一次性插入 40 个导致掉帧/卡顿
+      // 防重集合：基于 data.id 滤掉重复上墙项（同 id 仅保留首次出现）
+      const seenIds = new Set();
+
+      // 逐一上墙：每帧只插入 1 项，一张一张依次出现。
+      // 取片仍按整页（itemsPerPage）请求，避免逐张 GraphQL 往返把加载拖慢一个数量级。
       let cursor = 0;
-      let isFirstChunk = true;
+      let firstItemInserted = false;
 
       while (cursor < itemsData.length) {
-        if (!this.isEnabled || this.abortController?.signal?.aborted) return;
-        const remaining = itemsData.length - cursor;
-        const chunkSize = this.getProgressiveChunkSize(remaining, itemsPerPage);
-        const end = Math.min(itemsData.length, cursor + chunkSize);
+        // 代际失配即退出：refresh/disable 后旧批次的残留循环不得继续追加（否则同一图片重复上墙）
+        if (!this.isEnabled || gen !== this.generation) return;
+        const end = Math.min(itemsData.length, cursor + 1);
 
         const fragment = document.createDocumentFragment();
         const prepared = [];
 
         for (let i = cursor; i < end; i++) {
           const data = itemsData[i];
+          // 防重：同 id 已在墙上则跳过（可能在竞态或双重初始化中被重复添加）
+          const dataId = String(data?.id ?? '');
+          if (!dataId || seenIds.has(dataId) || this.addedDataIds.has(dataId)) continue;
+          seenIds.add(dataId);
+          this.addedDataIds.add(dataId);
           const item = this.createItemElement(data, useLightbox);
           if (!item) continue;
           const d = this.getImageDimensions(this.getItemThumbnail(data), data);
@@ -1386,17 +1608,19 @@
 
         cursor = end;
 
-        // 标题排序激活时，对全量已加载项重排（含本批），保证滚动加载后顺序仍一致
-        if (this.titleSortDir) this.applyTitleSort();
-
-        // 第一批出来后尽快隐藏 loading；后续分批插入对用户“感知更连续”
-        if (isFirstChunk) {
-          isFirstChunk = false;
+        // 首张上墙后立刻隐藏 loading，其余继续逐张插入
+        if (!firstItemInserted) {
+          firstItemInserted = true;
           this.showLoading(false);
         }
 
         if (cursor < itemsData.length) await this.waitNextFrame();
       }
+
+      // 标题排序激活时，对本批做一次全量重排。
+      // 原实现放在 chunk 循环内部：每 16 项就完整走一遍 Map 重建 + 排序 + 孤儿扫描 + 全量重挂 + 全量重排，
+      // 实测（400+ 项）每页会产生 3–5 个 55–178ms 的长任务；移到批末后每页只剩一次。
+      if (this.titleSortDir && this.isEnabled && gen === this.generation) this.applyTitleSort();
     }
 
     createItemElement(data, useLightbox) {
@@ -1410,6 +1634,8 @@
       const title = this.getItemTitle(data);
       const meta = this.getItemMeta(data);
       const specs = this.getItemSpecs(data);
+      // 右下角有时长角标时，给 meta 行预留空间，避免 hover 时胶囊滑到角标下面
+      if (specs.right) item.classList.add('power-wall-item-has-spec-right');
       item.innerHTML = `
         <a href="${link}" class="power-wall-link" data-id="${data.id}" data-type="${this.pageType}" ${useLightbox ? 'data-lightbox="1"' : ''}>
           <div class="power-wall-media">
@@ -1417,7 +1643,8 @@
             ${preview ? `<video src="${preview}" muted loop playsinline preload="none"></video>` : ''}
             ${this.pageType === 'scenes' ? '<div class="power-wall-play-indicator"><span class="play-icon"></span></div>' : ''}
           </div>
-          ${specs ? `<div class="power-wall-specs">${specs}</div>` : ''}
+          ${specs.left ? `<div class="power-wall-specs">${specs.left}</div>` : ''}
+          ${specs.right ? `<div class="power-wall-specs power-wall-specs-right">${specs.right}</div>` : ''}
           <div class="power-wall-overlay">
             <div class="power-wall-title" title="${this.escapeHtml(title)}">${this.escapeHtml(title)}</div>
             <div class="power-wall-meta">${meta}</div>
@@ -1445,24 +1672,25 @@
     }
     getItemMeta(data) {
       const parts = [];
-      if (data.rating100) parts.push(`<span class="meta-rating">⭐ ${Math.round(data.rating100 / 20)}</span>`);
-      if (data.o_counter) parts.push(`<span class="meta-views">👁 ${data.o_counter}</span>`);
-      if (data.performers?.length) parts.push(`<span class="meta-performers">👤 ${data.performers.slice(0, 2).map(p => p.name).join(', ')}</span>`);
-      if (data.studio?.name) parts.push(`<span class="meta-studio">🏢 ${data.studio.name}</span>`);
+      if (data.rating100) parts.push(`<span class="meta-rating">${META_ICONS.star}${Math.round(data.rating100 / 20)}</span>`);
+      if (data.o_counter) parts.push(`<span class="meta-views">${META_ICONS.eye}${data.o_counter}</span>`);
+      if (data.performers?.length) parts.push(`<span class="meta-performers">${META_ICONS.user}${this.escapeHtml(data.performers.slice(0, 2).map(p => p.name).join(', '))}</span>`);
+      if (data.studio?.name) parts.push(`<span class="meta-studio">${META_ICONS.building}${this.escapeHtml(data.studio.name)}</span>`);
       return parts.join('');
     }
     getItemSpecs(data) {
-      const specs = [];
+      // 返回 { left, right }：分辨率在左上角，时长等次要信息在右上角，避免都挤在左上
+      const out = { left: '', right: '' };
       let width, height;
       if (data.files?.[0]) { width = data.files[0].width; height = data.files[0].height; }
       else if (data.visual_files?.[0]) { width = data.visual_files[0].width; height = data.visual_files[0].height; }
       if (height) {
         const res = formatResolution(width, height);
-        let resClass = height >= 2160 ? 'resolution-4k' : height >= 1080 ? 'resolution-hd' : '';
-        specs.push(`<span class="power-wall-spec ${resClass}">${res}</span>`);
+        const resClass = height >= 2160 ? 'resolution-4k' : height >= 1080 ? 'resolution-hd' : '';
+        out.left = `<span class="power-wall-spec ${resClass}">${res}</span>`;
       }
-      if (data.files?.[0]?.duration) specs.push(`<span class="power-wall-spec duration">${formatDuration(data.files[0].duration)}</span>`);
-      return specs.join('');
+      if (data.files?.[0]?.duration) out.right = `<span class="power-wall-spec duration">${formatDuration(data.files[0].duration)}</span>`;
+      return out;
     }
     getImageDimensions(src, data) {
       let width, height;
@@ -1472,7 +1700,8 @@
       return { width: 16, height: 9 };
     }
     updateCount() {
-      const el = this.container?.querySelector('.power-wall-count');
+      const root = this.toolbarEl || this.container;
+      const el = root?.querySelector('.power-wall-count');
       if (el) el.textContent = `已加载 ${formatCountShort(this.items.length)} / ${formatCountShort(this.totalCount)} 项`;
     }
     showLoading(show) {
@@ -1484,26 +1713,89 @@
     showEndMessage() {
       if (this.loadingIndicator) {
         this.loadingIndicator.style.display = 'flex';
-        this.loadingIndicator.innerHTML = '<span class="power-wall-end">✨ 已加载全部</span>';
+        this.loadingIndicator.innerHTML = `<span class="power-wall-end">${ICONS.checkCircle}已加载全部</span>`;
       }
     }
     showError() {
       if (this.loadingIndicator) {
         this.loadingIndicator.style.display = 'flex';
-        this.loadingIndicator.innerHTML = '<span class="power-wall-error">❌ 加载失败，请刷新</span>';
+        this.loadingIndicator.innerHTML = `<span class="power-wall-error">${ICONS.alert}加载失败，请刷新</span>`;
       }
     }
     async refresh() {
       if (this.abortController) this.abortController.abort();
       this.abortController = new AbortController();
+      this.generation++;
       this.items.forEach(item => item.element?.remove());
       this.items = [];
+      this.addedDataIds.clear();
       this.page = 1;
       this.titleSortDir = null;
       this.updateTitleSortButtons();
       if (this.brickWall) this.brickWall.clear();
       if (this.scroller) this.scroller.reset();
       await this.loadMore();
+      this.updateModeButtons();
+    }
+
+    /** 当前是否已"离开首页"：URL 上带任何筛选/图库/随机/非默认排序参数 */
+    isAwayFromHome() {
+      const { findFilter, imageFilter, sceneFilter } = getFilterFromUrl();
+      if (findFilter.q) return true;
+      if (Object.keys(imageFilter).length || Object.keys(sceneFilter).length) return true;
+      const cfg = getConfig();
+      const defSort = cfg.lastSort || 'created_at';
+      const defDir = (cfg.lastSortDir || 'DESC').toUpperCase();
+      const sort = findFilter.sort || defSort;
+      if (String(sort).startsWith('random_')) return true;
+      if (sort !== defSort) return true;
+      return (findFilter.direction || defDir) !== defDir;
+    }
+
+    /**
+     * 三种"视图模式"按钮（首页 / 随览 / 随阅）各自的状态：
+     *   随览 = URL 上带随机排序（sortby=random_*）
+     *   随阅 = URL 上带随机图库（galleries=*）
+     *   首页 = 既非上面两者，也没有任何筛选/非默认排序，即默认视图
+     */
+    getViewModes() {
+      const params = new URLSearchParams(window.location.search);
+      const random = String(params.get('sortby') || '').startsWith('random_');
+      const gallery = params.has('galleries') || params.has('gallery_ids');
+      return { random, gallery, home: !random && !gallery && !this.isAwayFromHome() };
+    }
+
+    /**
+     * 只点亮"当前正在生效"的那个模式按钮：
+     * 点『随览』点亮的是『随览』、点『随阅』点亮的是『随阅』，
+     * 只有回到默认视图时『首页』才点亮，避免给用户错误的模式指示。
+     */
+    updateModeButtons() {
+      const root = this.toolbarEl || this.container;
+      if (!root) return;
+      const modes = this.getViewModes();
+      const set = (action, on) => {
+        const btn = root.querySelector(`[data-action="${action}"]`);
+        if (!btn) return;
+        btn.classList.toggle('power-wall-toggle-btn-active', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      };
+      set('home', modes.home);
+      set('random', modes.random);
+      set('randomGallery', modes.gallery);
+    }
+
+    /**
+     * 回到首页：清除 URL 上全部筛选/图库/随机/排序参数，恢复默认排序后重新加载。
+     * 随览（随机排序）与随阅（随机图库）之后无需刷新浏览器即可回到默认视图。
+     */
+    goHome() {
+      const modal = document.getElementById('power-wall-filter-modal');
+      if (modal) modal.style.display = 'none';
+      saveConfig({ lastSort: 'created_at', lastSortDir: 'DESC' });
+      const home = buildHomeUrl();
+      if (window.location.pathname + window.location.search !== home) window.history.pushState({}, '', home);
+      this.refresh();
     }
     loadRandom() {
       const url = new URL(window.location.href);
@@ -1585,8 +1877,8 @@
         <div class="power-wall-settings-overlay"></div>
         <div class="power-wall-settings-panel power-wall-filter-panel">
           <div class="power-wall-settings-header">
-            <h3>🔍 筛选</h3>
-            <button type="button" class="power-wall-settings-close" data-action="close">&times;</button>
+            <h3><span class="pw-h3-icon">${ICONS.filter}</span>筛选</h3>
+            <button type="button" class="power-wall-settings-close" data-action="close" title="关闭" aria-label="关闭">${ICONS.close}</button>
           </div>
           <div class="power-wall-settings-body">
             <div class="power-wall-settings-section">
@@ -1608,8 +1900,8 @@
             <div class="power-wall-settings-section"><h4>工作室</h4><div class="power-wall-filter-list" id="pw-filter-studios">加载中...</div></div>
           </div>
           <div class="power-wall-settings-footer">
-            <button type="button" class="power-wall-settings-btn" data-action="clearFilter">清除</button>
-            <button type="button" class="power-wall-settings-btn primary" data-action="applyFilter">应用</button>
+            <button type="button" class="power-wall-settings-btn" data-action="clearFilter"><span class="pw-btn-icon">${ICONS.rotateCcw}</span>清除</button>
+            <button type="button" class="power-wall-settings-btn primary" data-action="applyFilter"><span class="pw-btn-icon">${ICONS.check}</span>应用</button>
           </div>
         </div>
       `;
@@ -1664,7 +1956,7 @@
       };
       const clearFilter = () => {
         saveConfig({ lastSort: 'created_at', lastSortDir: 'DESC' });
-        window.history.pushState({}, '', window.location.origin + window.location.pathname);
+        window.history.pushState({}, '', buildHomeUrl());
         modal.style.display = 'none';
         this.refresh();
       };
@@ -1690,8 +1982,8 @@
         <div class="power-wall-settings-overlay"></div>
         <div class="power-wall-settings-panel">
           <div class="power-wall-settings-header">
-            <h3>砌墙设置</h3>
-            <button type="button" class="power-wall-settings-close" data-action="close">&times;</button>
+            <h3><span class="pw-h3-icon">${ICONS.sliders}</span>砌墙设置</h3>
+            <button type="button" class="power-wall-settings-close" data-action="close" title="关闭" aria-label="关闭">${ICONS.close}</button>
           </div>
           <div class="power-wall-settings-body">
             <div class="power-wall-settings-section">
@@ -1713,7 +2005,7 @@
               </div>
             </div>
             <details class="power-wall-settings-advanced">
-              <summary>高级</summary>
+              <summary><span class="pw-btn-icon">${ICONS.chevronDown}</span>高级</summary>
               <div class="power-wall-settings-row">
                 <label>每页数量</label>
                 <input type="number" id="pw-setting-itemsPerPage" min="12" max="120" value="${cfg.itemsPerPage}">
@@ -1724,8 +2016,8 @@
             </details>
           </div>
           <div class="power-wall-settings-footer">
-            <button type="button" class="power-wall-settings-btn" data-action="reset">恢复默认</button>
-            <button type="button" class="power-wall-settings-btn primary" data-action="save">保存并应用</button>
+            <button type="button" class="power-wall-settings-btn" data-action="reset"><span class="pw-btn-icon">${ICONS.rotateCcw}</span>恢复默认</button>
+            <button type="button" class="power-wall-settings-btn primary" data-action="save"><span class="pw-btn-icon">${ICONS.check}</span>保存并应用</button>
           </div>
         </div>
       `;
@@ -1777,10 +2069,39 @@
   }
 
   // ==================== 初始化 ====================
+  const SWITCH_BTN_ID = 'power-wall-switch-to-wall';
+
+  function removeSwitchToWallButton() {
+    document.getElementById(SWITCH_BTN_ID)?.remove();
+  }
+
+  /**
+   * 「原始」视图下的唯一返回入口：固定右下角的「墙视图」按钮。
+   * 刻意做成功能唯一（点击即回到砌墙，不带任何其它动作），位置固定且常驻，
+   * 避免用户停在原生视图时找不到插件、以为插件失效。
+   */
+  function mountSwitchToWallButton(pageType) {
+    removeSwitchToWallButton();
+    const btn = document.createElement('button');
+    btn.id = SWITCH_BTN_ID;
+    btn.type = 'button';
+    btn.className = 'power-wall-switch-to-wall';
+    btn.title = '切换到墙视图';
+    btn.setAttribute('aria-label', '切换到墙视图');
+    btn.innerHTML = `${ICONS.layoutGrid}<span>墙视图</span>`;
+    btn.addEventListener('click', () => {
+      setViewMode(pageType, 'wall');
+      removeSwitchToWallButton();
+      init();
+    });
+    document.body.appendChild(btn);
+  }
+
   let powerWall = null;
   function init() {
     const pageType = getPageType();
-    if (!pageType) return;
+    // 非列表页 / 该页面类型未启用：确保不残留隐藏原生内容的 class（否则会出现"空白列表"）
+    if (!pageType) { unmountPowerWall(false); return; }
     if (pageType === 'images') {
       const params = new URLSearchParams(window.location.search);
       if (params.has('galleries') || params.has('gallery_ids')) {
@@ -1788,12 +2109,22 @@
         return;
       }
     }
+    // 「原始」视图：不挂砌墙、不隐藏原生列表，只挂一个「墙视图」返回按钮
+    if (getViewMode(pageType) === 'original') {
+      if (powerWall) { powerWall.disable(); powerWall = null; }
+      document.documentElement.classList.remove('power-wall-preload');
+      document.body.classList.remove('power-wall-active');
+      mountSwitchToWallButton(pageType);
+      return;
+    }
+    removeSwitchToWallButton();
     if (powerWall) powerWall.disable();
     powerWall = new PowerWall();
     powerWall.init();
   }
   function mountPowerWall(container) {
     if (!container || powerWall) return;
+    if (getViewMode(getPageType() || '') === 'original') return;
     powerWall = new PowerWall();
     powerWall.enable(container);
   }
@@ -1806,6 +2137,7 @@
     // 列表页之间切换时保留 preload，避免重建间隙原生网格闪出
     if (!keepPreload) document.documentElement.classList.remove('power-wall-preload');
     document.getElementById('power-wall-back-to-top')?.remove();
+    removeSwitchToWallButton();
     const overlay = document.getElementById('power-wall-lightbox-overlay');
     if (overlay?.classList.contains('power-wall-lightbox-visible')) {
       overlay.classList.remove('power-wall-lightbox-visible');
@@ -1827,7 +2159,8 @@
         // 若 React 路由重绘将容器冲掉（detached），再兜底重建一次
         init();
         setTimeout(() => {
-          if (!powerWall || !powerWall.container?.isConnected) init();
+          // 「原始」视图下 powerWall 为空但按钮已在，属正常状态，不必再 init 一次
+          if (!powerWall?.container?.isConnected && !document.getElementById(SWITCH_BTN_ID)) init();
           requestAnimationFrame(() => document.body.classList.remove('power-wall-transitioning'));
         }, 300);
       } else {
@@ -1854,7 +2187,8 @@
         init();
         initTimeout = setTimeout(() => {
           initTimeout = null;
-          if (!powerWall || !powerWall.container?.isConnected) init();
+          // 「原始」视图下 powerWall 为空但按钮已在，属正常状态，不必再 init 一次
+          if (!powerWall?.container?.isConnected && !document.getElementById(SWITCH_BTN_ID)) init();
           requestAnimationFrame(() => document.body.classList.remove('power-wall-transitioning'));
         }, 300);
       } else {

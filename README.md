@@ -9,6 +9,7 @@
 | **FavoriteHeart** | 红心/心碎收藏，like/dislike 互斥 |
 | **PowerWall** | 砌墙视图（Stash 原生风格）— 边距/行距/列距可调、无限滚动、内置 lightbox、返回顶部、图片/短片列表 |
 | **GalleryWallCoverFill** | Galleries 墙视图封面填充 — 当图库首图比例与固定区域(3:2/3:4)不一致时，自适应填满区域，消除视觉空缺 |
+| **SpaceCleaner** | 空格清理 — 清理文件/文件夹名称末尾的多余空格（含扩展名前空格），带可视化控制面板、预览与冲突跳过 |
 
 ## 安装方式
 
@@ -60,6 +61,12 @@
 │   ├── GalleryWallCoverFill.yml
 │   ├── GalleryWallCoverFill.js
 │   └── GalleryWallCoverFill.css
+├── SpaceCleaner/
+│   ├── SpaceCleaner.yml
+│   ├── SpaceCleaner.js
+│   ├── SpaceCleaner.css
+│   ├── space_cleaner.py
+│   └── README.md
 ├── build_site.sh
 ├── .github/workflows/deploy.yml
 └── README.md

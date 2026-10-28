@@ -3,6 +3,28 @@
  * 砌墙布局：边距、行距、列距；与 Stash Image Wall 视觉一致
  */
 
+/* ------------------------------------------------------------------
+ * Stash 主题取值（Blueprint 深色）
+ * 注意：Stash 使用 Bootstrap 4.6 且不输出任何 CSS 自定义属性
+ * （_theme.scss 里全是 SCSS 变量：$body-bg/$card-bg/$secondary/$text-color/$text-muted），
+ * 因此插件里所有 var(--card-bg, …) / var(--text-muted, …) 实际上永远落在兜底值上，
+ * 结果就是面板底色、表单控件、次要文字与真实主题不一致。
+ * 这里把主题取值集中定义一次：
+ *   1) 宿主/主题若提供同名变量则优先（未来 Stash 升级到带 CSS 变量的版本也能自动跟随）
+ *   2) 否则使用 Stash Blueprint 深色的实际取值
+ *      $card-bg=#30404d  $body-bg=#202b33  $secondary=#394b59
+ *      $text-color=#f5f8fa  $text-muted=#bfccd6  边框取 Stash 表格边框 #414c53
+ * ------------------------------------------------------------------ */
+:root {
+  --pw-card-bg: var(--card-bg, var(--bs-secondary-bg, #30404d));
+  --pw-body-bg: var(--bs-body-bg, #202b33);
+  --pw-field-bg: var(--pw-field-bg);
+  --pw-text: var(--text-color, var(--bs-body-color, #f5f8fa));
+  --pw-muted: var(--text-muted, #bfccd6);
+  --pw-border: var(--border-color, var(--bs-border-color, #414c53));
+  --pw-primary: var(--primary, var(--bs-primary, #137cbd));
+}
+
 /* === 抢先隐藏原生墙/网格（仅 /images、/scenes 列表页）=== */
 /* 预占滚动条空间，避免首次渲染时宽度重算导致的闪烁 */
 html.power-wall-preload {
@@ -31,7 +53,9 @@ html.power-wall-preload .gallery-card {
   position: relative;
   width: 100%;
   max-width: 100%;
-  padding: 0 4px;
+  /* 顶部预留悬浮工具栏的高度（JS 按系统顶栏实测高度写入）：工具栏 fixed 脱离文档流，
+     不留白的话会盖住第一行图片 */
+  padding: var(--pw-toolbar-space, 48.75px) 4px 0;
   margin: 0;
   box-sizing: border-box;
   overflow-x: hidden;
@@ -58,7 +82,7 @@ html.power-wall-preload .gallery-card {
 .power-wall-item {
   position: absolute;
   margin: 0;
-  background: var(--card-bg, #0d0d12);
+  background: #000;
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
@@ -127,6 +151,7 @@ html.power-wall-preload .gallery-card {
   opacity: 0;
   z-index: 3;
   pointer-events: none;
+  transition: opacity 0.15s ease;
 }
 
 .power-wall-item:hover .power-wall-play-indicator {
@@ -148,15 +173,22 @@ html.power-wall-preload .gallery-card {
 }
 
 /* === 信息覆盖层 === */
+/* 文字全部压在不可预知的照片内容上，因此遮罩必须足够深：渐变在文字所处高度仍是实色，
+   并对标题再加一层 text-shadow，避免过曝/白底照片上白字消失 */
 .power-wall-overlay {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 2rem 0.5rem 0.5rem;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.85), transparent);
+  padding: 2.5rem 0.5rem 0.5rem;
+  background: linear-gradient(to top,
+    rgba(0, 0, 0, 0.92) 0%,
+    rgba(0, 0, 0, 0.78) 32%,
+    rgba(0, 0, 0, 0.45) 62%,
+    rgba(0, 0, 0, 0) 100%);
   opacity: 0;
   z-index: 5;
+  transition: opacity 0.15s ease;
 }
 
 .power-wall-item:hover .power-wall-overlay {
@@ -171,23 +203,40 @@ html.power-wall-preload .gallery-card {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-bottom: 0.2rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 
 .power-wall-meta {
   font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.9);
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
 
+/* 胶囊同样不能依赖照片亮度：深色半透明底 + 细边，亮图/暗图都成立 */
+/* 右下角有时长角标：meta 行预留出角标宽度，胶囊提前换行（标题不受影响） */
+.power-wall-item-has-spec-right .power-wall-meta {
+  padding-right: 3.4rem;
+}
+
 .power-wall-meta span {
   display: inline-flex;
   align-items: center;
-  gap: 0.2rem;
-  background: rgba(255, 255, 255, 0.1);
+  gap: 0.25rem;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   padding: 0.15rem 0.4rem;
   border-radius: 3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.power-wall-meta span svg {
+  display: block;
+  height: 12px;
+  width: auto;
+  flex: none;
+  opacity: 0.85;
 }
 
 .power-wall-specs {
@@ -199,30 +248,72 @@ html.power-wall-preload .gallery-card {
   z-index: 6;
 }
 
+/* 时长等次要信息放右下角：右上角留给其它插件（如 FavoriteHeart 之类）构建的元素，
+   避免相互遮挡；分辨率仍在左上角。 */
+.power-wall-specs.power-wall-specs-right {
+  top: auto;
+  bottom: 0.5rem;
+  left: auto;
+  right: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* 角标：毛玻璃（轻着色 + 背景模糊 + 细边），不再使用实色块；
+   文字仍保留 text-shadow，保证压在白底照片上也读得清。
+   若想彻底"无色块"，删掉 background / backdrop-filter 两行即可。 */
 .power-wall-spec {
-  padding: 0.2rem 0.4rem;
+  padding: 0.15rem 0.4rem;
   font-size: 0.65rem;
   font-weight: 600;
   color: #fff;
-  text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 2px #000;
+  background: rgba(0, 0, 0, 0.22);
+  -webkit-backdrop-filter: blur(6px) saturate(1.15);
+  backdrop-filter: blur(6px) saturate(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
 }
 
-/* === 工具栏（Stash 风格，自适应不换行）=== */
+/* 4K 仅做极轻的色相提示，不再是高饱和色块 */
+.power-wall-spec.resolution-4k {
+  background: rgba(19, 124, 189, 0.26);
+}
+
+.power-wall-spec.resolution-hd {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+/* 时长与分辨率角标样式保持一致（同尺寸、同毛玻璃、同圆角） */
+.power-wall-spec.duration {
+  background: rgba(0, 0, 0, 0.22);
+  letter-spacing: 0.02em;
+}
+
+/* === 悬浮工具栏（固定于系统顶栏下方，与系统顶栏同层）=== */
+/* 工具栏独立挂在 body 上（见 JS createToolbar），position:fixed 才能不受容器
+   opacity / 祖先 transform 影响。top 与 height 由 JS 按 .top-nav 实测高度写成内联值，
+   默认 48.75px 应对外部页面；z-index 与 Bootstrap .fixed-top 相同（1030），
+   底色/边框对齐系统顶栏（bg-dark #394b59、边框 #414c53），视觉上像顶栏的第二行。 */
 .power-wall-toolbar {
+  position: fixed;
+  top: 48.75px;
+  left: 0;
+  right: 0;
+  z-index: 1030;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: nowrap;
   gap: 0.5rem;
-  padding: 0.4rem 0.75rem;
-  margin-bottom: 0.25rem;
-  width: 100%;
+  height: 48.75px;
+  padding: 0 1rem;
+  margin: 0;
+  width: auto;
   min-width: 0;
   box-sizing: border-box;
-  background: rgba(31, 36, 59, 0.65);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: #394b59;
+  border-bottom: 1px solid #414c53;
 }
 
 .power-wall-toolbar-left {
@@ -237,7 +328,7 @@ html.power-wall-preload .gallery-card {
 .power-wall-count {
   flex-shrink: 0;
   font-size: 0.8rem;
-  color: var(--text-muted, #888);
+  color: var(--pw-muted);
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -255,7 +346,7 @@ html.power-wall-preload .gallery-card {
 .power-wall-zoom-slider {
   width: 64px;
   min-width: 48px;
-  accent-color: var(--primary, #137cbd);
+  accent-color: var(--pw-primary);
   cursor: pointer;
 }
 
@@ -268,28 +359,44 @@ html.power-wall-preload .gallery-card {
 .power-wall-toggle-btn {
   padding: 0.35rem 0.6rem;
   background: transparent;
-  border: 1px solid var(--border-color, #333);
+  border: 1px solid var(--pw-border);
   border-radius: 4px;
-  color: var(--text-color, #fff);
+  color: var(--pw-text);
   cursor: pointer;
   font-size: 0.8rem;
+  /* 图标 + 文字用 flex 对齐，替代原先依赖 emoji 基线/字号的排版 */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  white-space: nowrap;
 }
 
 .power-wall-toggle-btn:hover {
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* 激活态统一使用与缩放滑块同一个强调色（--primary），不再混用 --primary-color 的紫色 */
 .power-wall-toggle-btn.power-wall-toggle-btn-active {
-  background: rgba(137, 87, 229, 0.35);
-  border-color: var(--primary-color, #8957e5);
+  background: rgba(19, 124, 189, 0.3);
+  background: color-mix(in srgb, var(--pw-primary) 30%, transparent);
+  border-color: var(--pw-primary);
 }
 
 .power-wall-toggle-btn .pw-btn-icon {
-  display: inline;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.power-wall-toggle-btn .pw-btn-icon svg {
+  display: block;
+  /* FA 图标非正方形（如箭头 384×512）：只锁高度，宽度按原始比例 */
+  height: 16px;
+  width: auto;
 }
 
 .power-wall-toggle-btn .pw-btn-text {
-  margin-left: 0.25em;
+  margin-left: 0;
 }
 
 /* 宽度变小时仅显示图标，宽度足够时显示图标+文字 */
@@ -301,9 +408,11 @@ html.power-wall-preload .gallery-card {
     padding: 0.35rem 0.45rem;
     min-width: 32px;
     line-height: 1;
+    justify-content: center;
   }
-  .power-wall-toggle-btn .pw-btn-icon {
-    font-size: 1rem;
+  .power-wall-toggle-btn .pw-btn-icon svg {
+    height: 18px;
+    width: auto;
   }
 }
 
@@ -361,7 +470,7 @@ body.power-wall-lightbox-open {
   justify-content: center;
   gap: 0.5rem;
   padding: 1rem;
-  color: var(--text-muted, #888);
+  color: var(--pw-muted);
   font-size: 0.85rem;
 }
 
@@ -370,7 +479,7 @@ body.power-wall-lightbox-open {
   width: 28px;
   height: 28px;
   border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: var(--primary, #137cbd);
+  border-top-color: var(--pw-primary);
   border-radius: 50%;
   animation: power-wall-spin 0.8s linear infinite;
 }
@@ -380,15 +489,21 @@ body.power-wall-lightbox-open {
 }
 
 .power-wall-end {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   text-align: center;
   padding: 1rem 2rem;
-  color: var(--text-muted, #888);
+  color: var(--pw-muted);
   font-size: 0.9rem;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 8px;
 }
 
 .power-wall-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   text-align: center;
   padding: 1rem 2rem;
   color: #f5576c;
@@ -427,7 +542,7 @@ body.power-wall-lightbox-open {
   max-width: 420px;
   max-height: 90vh;
   overflow: hidden;
-  background: var(--card-bg, #1a1a2e);
+  background: var(--pw-card-bg);
   border-radius: 12px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
   display: flex;
@@ -439,7 +554,7 @@ body.power-wall-lightbox-open {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border-color, #333);
+  border-bottom: 1px solid var(--pw-border);
   flex-shrink: 0;
 }
 
@@ -447,7 +562,22 @@ body.power-wall-lightbox-open {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
-  color: var(--text-color, #fff);
+  color: var(--pw-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.power-wall-settings-header h3 .pw-h3-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--pw-muted);
+}
+
+.power-wall-settings-header h3 .pw-h3-icon svg {
+  display: block;
+  height: 18px;
+  width: auto;
 }
 
 .power-wall-settings-close {
@@ -456,16 +586,32 @@ body.power-wall-lightbox-open {
   padding: 0;
   background: transparent;
   border: none;
-  color: var(--text-muted, #888);
-  font-size: 1.5rem;
+  color: var(--pw-muted);
   cursor: pointer;
   border-radius: 4px;
   line-height: 1;
+  /* 与工具栏图标一致：内联 SVG + flex 居中，而不是文本 × */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.power-wall-settings-close svg {
+  display: block;
+  height: 18px;
+  width: auto;
 }
 
 .power-wall-settings-close:hover {
   background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  /* 由主题文字色推导，浅色主题也有 hover 反馈 */
+  background: color-mix(in srgb, var(--pw-text) 12%, transparent);
+  color: var(--pw-text);
+}
+
+.power-wall-settings-close:active {
+  background: color-mix(in srgb, var(--pw-text) 18%, transparent);
 }
 
 .power-wall-settings-body {
@@ -486,7 +632,7 @@ body.power-wall-lightbox-open {
   margin: 0 0 0.75rem 0;
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--text-muted, #888);
+  color: var(--pw-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -494,17 +640,18 @@ body.power-wall-lightbox-open {
 .power-wall-settings-select {
   width: 100%;
   padding: 0.5rem 0.75rem;
-  background: var(--bs-body-bg, #0d0d12);
-  border: 1px solid var(--border-color, #333);
+  background: var(--pw-field-bg);
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
-  color: var(--text-color, #fff);
+  color: var(--pw-text);
   font-size: 0.95rem;
   cursor: pointer;
 }
 
-.power-wall-settings-select:focus {
-  outline: none;
-  border-color: var(--primary, #137cbd);
+.power-wall-settings-select:focus-visible {
+  outline: 2px solid var(--pw-primary);
+  outline-offset: 1px;
+  border-color: var(--pw-primary);
 }
 
 .power-wall-settings-row {
@@ -521,7 +668,7 @@ body.power-wall-lightbox-open {
 
 .power-wall-settings-row label {
   font-size: 0.9rem;
-  color: var(--text-color, #fff);
+  color: var(--pw-text);
   flex: 1;
   min-width: 0;
 }
@@ -530,9 +677,10 @@ body.power-wall-lightbox-open {
   width: 100px;
   padding: 0.4rem 0.6rem;
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--border-color, #333);
+  background: color-mix(in srgb, var(--pw-text) 8%, transparent);
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
-  color: var(--text-color, #fff);
+  color: var(--pw-text);
   font-size: 0.9rem;
   text-align: right;
 }
@@ -544,18 +692,22 @@ body.power-wall-lightbox-open {
   cursor: pointer;
 }
 
-.power-wall-settings-row input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+/* 复选框统一：尺寸与强调色在设置面板 / 筛选面板一致（此前筛选面板用的是浏览器默认样式） */
+.power-wall-settings-modal input[type="checkbox"],
+.power-wall-filter-modal input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
   cursor: pointer;
-  accent-color: var(--primary, #137cbd);
+  accent-color: var(--pw-primary);
 }
 
 .power-wall-settings-footer {
   display: flex;
   gap: 0.75rem;
   padding: 1rem 1.25rem;
-  border-top: 1px solid var(--border-color, #333);
+  border-top: 1px solid var(--pw-border);
   flex-shrink: 0;
 }
 
@@ -563,25 +715,50 @@ body.power-wall-lightbox-open {
   flex: 1;
   padding: 0.6rem 1rem;
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid var(--border-color, #333);
+  border: 1px solid var(--pw-border);
   border-radius: 6px;
-  color: var(--text-color, #fff);
+  color: var(--pw-text);
   font-size: 0.9rem;
   cursor: pointer;
+  /* 与工具栏按钮同一套图标+文字排版 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.power-wall-settings-btn .pw-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.power-wall-settings-btn .pw-btn-icon svg {
+  display: block;
+  height: 16px;
+  width: auto;
 }
 
 .power-wall-settings-btn:hover {
   background: rgba(255, 255, 255, 0.12);
+  background: color-mix(in srgb, var(--pw-text) 12%, transparent);
+}
+
+.power-wall-settings-btn:focus-visible {
+  outline: 2px solid var(--pw-primary);
+  outline-offset: 1px;
 }
 
 .power-wall-settings-btn.primary {
-  background: var(--primary, #137cbd);
-  border-color: var(--primary, #137cbd);
+  background: var(--pw-primary);
+  border-color: var(--pw-primary);
+  color: #fff;
 }
 
 .power-wall-settings-btn.primary:hover {
-  background: #1a8fd4;
-  border-color: #1a8fd4;
+  /* 由主题强调色推导，不再硬编码 #1a8fd4 */
+  background: color-mix(in srgb, var(--pw-primary) 85%, #fff 15%);
+  border-color: color-mix(in srgb, var(--pw-primary) 85%, #fff 15%);
 }
 
 .power-wall-filter-panel {
@@ -592,21 +769,68 @@ body.power-wall-lightbox-open {
 .power-wall-filter-select {
   width: 100%;
   padding: 0.4rem 0.6rem;
-  background: var(--bs-body-bg, #0d0d12);
-  border: 1px solid var(--border-color, #333);
-  border-radius: 4px;
-  color: var(--text-color, #fff);
+  background: var(--pw-field-bg);
+  border: 1px solid var(--pw-border);
+  border-radius: 6px;
+  color: var(--pw-text);
   font-size: 0.9rem;
   box-sizing: border-box;
+}
+
+.power-wall-filter-input::placeholder {
+  color: var(--pw-muted);
+  opacity: 1;
+}
+
+.power-wall-filter-input:focus-visible,
+.power-wall-filter-select:focus-visible {
+  outline: 2px solid var(--pw-primary);
+  outline-offset: 1px;
+  border-color: var(--pw-primary);
 }
 
 .power-wall-filter-list {
   max-height: 140px;
   overflow-y: auto;
   padding: 0.4rem 0;
-  border: 1px solid var(--border-color, #333);
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--pw-border);
+  border-radius: 6px;
+  background: var(--pw-body-bg);
+  /* 面板内不再出现浏览器默认的亮色滚动条；取主题弱化色，深浅主题都可见 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: color-mix(in srgb, var(--pw-muted) 60%, transparent) transparent;
+}
+
+.power-wall-filter-list::-webkit-scrollbar,
+.power-wall-settings-body::-webkit-scrollbar {
+  width: 10px;
+}
+
+.power-wall-filter-list::-webkit-scrollbar-track,
+.power-wall-settings-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.power-wall-filter-list::-webkit-scrollbar-thumb,
+.power-wall-settings-body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  background: color-mix(in srgb, var(--pw-muted) 60%, transparent);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.power-wall-filter-list::-webkit-scrollbar-thumb:hover,
+.power-wall-settings-body::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--pw-muted) 85%, transparent);
+  background-clip: content-box;
+}
+
+.power-wall-settings-body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-color: color-mix(in srgb, var(--pw-muted) 60%, transparent) transparent;
 }
 
 .power-wall-filter-item {
@@ -616,17 +840,22 @@ body.power-wall-lightbox-open {
   padding: 0.3rem 0.6rem;
   cursor: pointer;
   font-size: 0.85rem;
-  color: var(--text-color, #fff);
+  color: var(--pw-text);
 }
 
 .power-wall-filter-item:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.06);
+  background: color-mix(in srgb, var(--pw-text) 9%, transparent);
+}
+
+.power-wall-filter-item:has(input:checked) {
+  color: var(--pw-primary);
 }
 
 .power-wall-filter-empty {
   display: block;
   padding: 0.5rem 0.6rem;
-  color: var(--text-muted, #666);
+  color: var(--pw-muted);
   font-size: 0.85rem;
 }
 
@@ -643,13 +872,43 @@ body.power-wall-lightbox-open {
 .power-wall-settings-advanced {
   margin-top: 1rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--border-color, #333);
+  border-top: 1px solid var(--pw-border);
 }
 
 .power-wall-settings-advanced summary {
   cursor: pointer;
   font-size: 0.9rem;
-  color: var(--text-muted, #888);
+  color: var(--pw-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  list-style: none;
+  transition: color 0.15s ease;
+}
+
+.power-wall-settings-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+.power-wall-settings-advanced summary:hover {
+  color: var(--pw-text);
+}
+
+.power-wall-settings-advanced summary .pw-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.power-wall-settings-advanced summary .pw-btn-icon svg {
+  display: block;
+  height: 14px;
+  width: auto;
+  transition: transform 0.15s ease;
+}
+
+.power-wall-settings-advanced[open] summary .pw-btn-icon svg {
+  transform: rotate(180deg);
 }
 
 /* === 内置 Lightbox（借鉴 Fancybox 的现代风格）=== */
@@ -687,6 +946,10 @@ body.power-wall-lightbox-open {
   padding: 0.75rem 1rem;
   z-index: 2;
   gap: 0.75rem;
+  /* 不放任何底衬（既不遮罩也不毛玻璃）：标题栏必须完全透明，
+     只靠文字自身的 text-shadow 保证压在白底照片上仍可读。 */
+  background: none;
+  border: none;
 }
 
 .power-wall-lightbox-infobar {
@@ -694,10 +957,12 @@ body.power-wall-lightbox-open {
   flex-direction: column;
   gap: 0.2rem;
   font-size: 0.9rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   font-variant-numeric: tabular-nums;
   max-width: 60%;
   overflow: hidden;
+  /* 无底衬方案下唯一的对比度保障：双层阴影（贴近的实影 + 外扩柔影） */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.75);
 }
 
 .power-wall-lightbox-infobar-line1 {
@@ -708,22 +973,22 @@ body.power-wall-lightbox-open {
 
 .power-wall-lightbox-infobar-line2 {
   font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.8);
 }
 
+/* 图库/路径标签：位于已毛玻璃化的标题栏内，用轻量白而非高饱和蓝色块，
+   避免整条标题栏出现一个突兀的色块 */
 .power-wall-lightbox-gallery-link {
-  color: var(--primary, #137cbd);
+  /* 不带任何背景色块/边框：文件夹（图库）名与文件名一样，只是文字 + 阴影 */
+  color: #d4e9fa;
   text-decoration: none;
-  padding: 0.15rem 0.4rem;
-  margin: -0.15rem -0.4rem;
-  border-radius: 4px;
-  background: rgba(19, 124, 189, 0.15);
-  transition: background 0.15s, color 0.15s;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.75);
+  transition: color 0.15s;
 }
 
 .power-wall-lightbox-gallery-link:hover {
-  background: rgba(19, 124, 189, 0.25);
-  color: #5eb3f6;
+  color: #fff;
+  text-decoration: underline;
 }
 
 .power-wall-lightbox-toolbar {
@@ -767,6 +1032,27 @@ body.power-wall-lightbox-open {
 .power-wall-lightbox-btn[data-action="toggle-1to1"] {
   font-size: 0.85rem;
   font-weight: 500;
+}
+
+/* 关闭按钮同样是图标按钮，与设置/筛选面板保持一致 */
+.power-wall-lightbox-close svg {
+  display: block;
+  height: 18px;
+  width: auto;
+}
+
+/* 缩放按钮（− / +）与翻页箭头：与关闭按钮同一套 FA 图标 */
+.power-wall-lightbox-btn svg {
+  display: block;
+  height: 16px;
+  width: auto;
+}
+
+.power-wall-lightbox-prev svg,
+.power-wall-lightbox-next svg {
+  display: block;
+  height: 22px;
+  width: auto;
 }
 
 .power-wall-lightbox-prev,
@@ -932,7 +1218,7 @@ body.power-wall-lightbox-open {
 
 .power-wall-lightbox-detail {
   font-size: 0.9rem;
-  color: var(--primary, #137cbd);
+  color: var(--pw-primary);
   text-decoration: none;
 }
 
@@ -955,7 +1241,7 @@ body.power-wall-lightbox-open {
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: var(--text-color, #fff);
+  color: var(--pw-text);
   background: rgba(31, 36, 59, 0.9);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
@@ -993,10 +1279,53 @@ body.power-wall-lightbox-open {
   transform: translateY(0) scale(0.98);
 }
 
+/* === 「原始」视图下的返回入口：右下角「墙视图」按钮 ===
+   这是从原生视图回到砌墙的唯一入口，因此必须常驻、醒目、功能唯一。
+   用主题变量着色，深浅主题都成立（左上有零散悬浮 chrome，此处保持一致的位置语言）。 */
+.power-wall-switch-to-wall {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9998;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--pw-text);
+  background: var(--pw-card-bg);
+  border: 1px solid var(--pw-border);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.power-wall-switch-to-wall:hover {
+  border-color: var(--pw-primary);
+  transform: translateY(-1px);
+}
+
+.power-wall-switch-to-wall:active {
+  transform: translateY(0);
+}
+
+.power-wall-switch-to-wall svg {
+  display: block;
+  height: 16px;
+  width: auto;
+  flex: none;
+}
+
+.power-wall-switch-to-wall span {
+  white-space: nowrap;
+}
+
 /* === 响应式：窄屏时压缩间距与搜索框，尽量保持单行 === */
 @media (max-width: 768px) {
   .power-wall-toolbar {
-    padding: 0.35rem 0.5rem;
+    padding: 0 0.5rem;
     gap: 0.4rem;
   }
   .power-wall-toolbar-left {

@@ -1,0 +1,13 @@
+name: SpaceCleaner
+description: 清理文件/文件夹名称末尾的多余空格（含扩展名前空格），提供可视化控制面板，支持预览与一键清理
+version: 1.0.4
+exec:
+  - python3
+  - "{pluginDir}/space_cleaner.py"
+interface: raw
+errLog: warning
+ui:
+  javascript:
+    - SpaceCleaner.js
+  css:
+    - SpaceCleaner.css
